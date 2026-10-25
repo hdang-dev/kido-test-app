@@ -22,7 +22,7 @@ Work in the order **contract → backend → frontend → verify**. The referenc
    - the wrong role → 403
    - anonymous → 401
    - invalid body → 400 with `fieldErrors`
-   - mutating requests without `.with(csrf())` → 403
+   - mutating requests without a CSRF token → 403. Send tokens with `SpaCsrf.token(mvc)`, never `csrf()`.
 
 ## 3. Frontend (`frontend/`)
 1. **Types**: add the request/response interfaces to `src/api/types.ts`.

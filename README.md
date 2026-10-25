@@ -42,7 +42,7 @@ cd frontend && npm test && npm run build
 ## Demo accounts
 | Email | Password | Role |
 |-------|----------|------|
-| superadmin@kido.local | SuperAdmin@123 | SUPER_ADMIN (seeded on first startup, from Phase 1) |
+| superadmin@kido.local | SuperAdmin@123 | SUPER_ADMIN (seeded on first startup) |
 
 Any other account can be created through the sign-up page.
 

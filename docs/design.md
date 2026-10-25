@@ -26,9 +26,9 @@ Browser ──► Vite dev server :5173 ──/api proxy──► Spring Boot :8
 ## 3. Key decisions
 | # | Decision | Why | Rejected alternatives |
 |---|----------|-----|-----------------------|
-| D1 | **Server-side session + cookie** (Spring Security), not JWT | The `HttpOnly` cookie can't be read by JS (XSS). Sessions can be revoked instantly on logout, password change, or role change. | JWT in `localStorage`: readable by XSS and hard to revoke |
+| D1 | **Server-side session + cookie** (Spring Security), not JWT | The `HttpOnly` `SESSION` cookie (Spring Session) can't be read by JS (XSS). Sessions can be revoked instantly on logout, password change, or role change. | JWT in `localStorage`: readable by XSS and hard to revoke |
 | D2 | **Spring Session JDBC** | Sessions survive restarts. `FindByIndexNameSessionRepository` can find and expire all sessions of a user (needed by D4 and the password change). Built-in remember-me. | In-memory `HttpSession`: lost on restart and can't list a user's sessions |
-| D3 | **CSRF via `csrf.spa()`** | Cookie-based auth needs CSRF protection. The SPA reads the `XSRF-TOKEN` cookie and sends `X-XSRF-TOKEN`. | Disabling CSRF: unsafe with cookies |
+| D3 | **CSRF: cookie-to-header token** | Cookie-based auth needs CSRF protection. `CookieCsrfTokenRepository.withHttpOnlyFalse()` issues a readable `XSRF-TOKEN` cookie, and the SPA echoes it in `X-XSRF-TOKEN`. `SpaCsrfTokenRequestHandler` follows the Spring Security 6.5 reference recipe (`csrf.spa()` only exists from 7.0). | Disabling CSRF: unsafe with cookies |
 | D4 | **3-tier roles with one seeded SUPER_ADMIN** (see §5) | Lets admins grant admin freely, but stops admins revoking each other. There is a single, non-transferable root. | 2 roles where any admin revokes any admin: admin lock-out wars. Multiple supers: the same problem one level up |
 | D5 | **Email is the identity. Username is a non-unique display name** | The default username comes from the part of the email before the @, so collisions are expected (`john@a.com`, `john@b.com`). | Unique username: forces awkward suffixes at sign-up |
 | D6 | **Flyway owns the schema** (`ddl-auto: validate`) | The schema is versioned in git and reviewable. Tests run the same migrations. | `ddl-auto: update`: invisible, unreviewable schema drift |
@@ -40,7 +40,7 @@ Browser ──► Vite dev server :5173 ──/api proxy──► Spring Boot :8
 | Column          | Type | Notes |
 |-----------------|------|-------|
 | `id`            | `uuid` PK, default `gen_random_uuid()` | Random (v4). Entity: `@GeneratedValue(strategy = GenerationType.UUID)` |
-| `email`         | `varchar(254)` not null | Stored lower-cased and trimmed. `UNIQUE` |
+| `email`         | `varchar(254)` not null | Stored lower-cased and trimmed by the app. Unique on `lower(email)`, so case-insensitive uniqueness is enforced by the DB itself |
 | `password_hash` | `varchar(100)` not null | BCrypt |
 | `username`      | `varchar(50)` not null | Display name, **not unique**. Defaults to the part of the email before the @ |
 | `bio`           | `varchar(500)` null | |
@@ -48,7 +48,7 @@ Browser ──► Vite dev server :5173 ──/api proxy──► Spring Boot :8
 | `created_at` / `updated_at` | `timestamptz` not null | |
 
 Plus a partial unique index ensuring **at most one** `SUPER_ADMIN`.
-**`spring_session`, `spring_session_attributes`** (Flyway `V2`): the standard Spring Session JDBC schema.
+**`spring_session`, `spring_session_attributes`** (Flyway `V2`): the official Spring Session JDBC schema, with `PRINCIPAL_NAME` widened from 100 to 254 because the principal name is the email. Sessions are created only on login: the request cache is disabled, so anonymous 401s never write session rows.
 
 ## 5. Roles and permissions
 Role hierarchy: `SUPER_ADMIN > ADMIN > USER`, so `hasRole('ADMIN')` also lets SUPER_ADMIN through.
@@ -79,7 +79,7 @@ Recovery after losing the super admin password requires manual DB access (an acc
 
 **Login**: `/login`
 1. The user enters email, password, and an optional "Remember me".
-2. `POST /api/auth/login` → `AuthenticationManager` → the session ID is rotated → `200 MeResponse`.
+2. `POST /api/auth/login` → `AuthenticationManager` → `200 MeResponse`. Because login is a controller, not a filter, **`AuthController` must do explicitly** what `formLogin` would do: run the `SessionAuthenticationStrategy` (rotates the session ID against fixation, and rotates the CSRF token), then save the `SecurityContext` through `SecurityContextRepository`. Phase 2 tests must assert that the session ID changes.
 3. A failure always returns `401` with "Invalid email or password". It never reveals which part was wrong.
 4. **Session lifetime:** the idle timeout is 30 min. With "Remember me", the session cookie persists for 30 days (Spring Session remember-me). Without it, the cookie ends when the browser closes.
 
@@ -114,7 +114,7 @@ All endpoints sit under `/api` and use JSON. Errors are returned as `ErrorRespon
 | Field | Rule |
 |-------|------|
 | email | Required, valid format, max 254 characters, unique (case-insensitive) |
-| password | 8–72 characters (BCrypt ignores everything past 72 bytes), at least one letter and one digit. Must equal `confirmPassword` |
+| password | At least 8 characters and at most **72 UTF-8 bytes** (BCrypt's hard limit; Vietnamese letters take 2–3 bytes each), with at least one letter and one digit. Must equal `confirmPassword`. Enforced by `@ValidPassword` → `PasswordPolicy` |
 | username | Optional at sign-up (blank → email local part), max 50 characters, trimmed |
 | bio | Optional, max 500 characters |
 
@@ -138,15 +138,15 @@ Validation runs on both sides: on the frontend for UX, and on the backend as the
 - Commits are small conventional commits: `feat(auth): …`, `test(user): …`, `docs: …`, `chore: …`.
 - **Docs ship with the code.** Every PR updates this file (status, API, and decisions where relevant), plus `CLAUDE.md`, the README, or the skills if they are affected.
 - Before merging, `mvn test`, `npm test`, and `npm run build` must all be green, and the `security-review` skill must have been run on the diff.
-- **Review happens per phase, in the PR.** The project owner reviews the whole phase and leaves comments. Each comment is addressed with a new commit on the same branch, and pushed history is never rewritten. **Only the owner merges.** Nothing is pushed directly to `main`.
+- **Review happens per phase, in the PR.** The project owner reviews the whole phase and leaves comments. Each comment is addressed with a new commit on the same branch, and pushed history is never rewritten. **Merging needs the owner's approval (LGTM)** and is always a **squash merge**: each phase lands on `main` as one commit (`<type>: phase N — <name> (#PR)`), while the PR keeps the detailed commits. Nothing is pushed directly to `main`.
 - **Phase status:** a phase's own PR marks it 🔵 *in review*. The next phase's PR flips it to ✅ *done* once it has been merged, because nobody pushes to `main` just to update a status.
 
 ## 12. Phases
 | # | Phase | Scope | Status | PR |
 |---|-------|-------|--------|----|
-| 0 | Foundation | git and GitHub, monorepo scaffold, docker-compose Postgres, Flyway, Testcontainers, Tailwind, docs and skills | 🔵 in review | [#1](https://github.com/hdang-dev/kido-test-app/pull/1) |
-| 1 | Security core | `V1` and `V2` migrations, `AppUser`, `UserDetailsService`, `SecurityConfig` (session, CSRF, 401/403 JSON, role hierarchy), Spring Session JDBC, `SuperAdminSeeder`, `GlobalExceptionHandler` | ⬜ | |
-| 2 | Sign up / Login / Logout | Signup, login (remember me), logout, and `/api/me` on BE and FE; `SignupPage`, `LoginPage`, auth context, guards | ⬜ | |
+| 0 | Foundation | git and GitHub, monorepo scaffold, docker-compose Postgres, Flyway, Testcontainers, Tailwind, docs and skills | ✅ done | [#1](https://github.com/hdang-dev/kido-test-app/pull/1) |
+| 1 | Security core | `V1` and `V2` migrations, `AppUser`, `UserDetailsService`, `SecurityConfig` (session, CSRF, 401/403 JSON, role hierarchy), Spring Session JDBC, `SuperAdminSeeder`, `GlobalExceptionHandler` | 🔵 in review | [#2](https://github.com/hdang-dev/kido-test-app/pull/2) |
+| 2 | Sign up / Login / Logout | Signup, login (remember me), logout, and `/api/me` on BE and FE; `SignupPage`, `LoginPage`, auth context, guards. Login must rotate the session ID and CSRF token and persist the context (§6) | ⬜ | |
 | 3 | Profile | Edit username and bio, change password (expires other sessions), BE and FE tests | ⬜ | |
 | 4 | User management | Paginated list, grant and revoke admin per §5, session expiry on role change, RBAC tests | ⬜ | |
 | 5 | Hardening and wrap-up | `security-review` skill pass and fixes, README, demo script | ⬜ | |

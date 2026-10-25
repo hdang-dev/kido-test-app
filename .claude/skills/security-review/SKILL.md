@@ -24,7 +24,8 @@ For each item, report **PASS**, **FAIL**, or **N/A**, with `file:line` evidence.
 - [ ] Seeded admin credentials come from config or env vars and are documented as demo-only.
 
 ## Backend: session, CSRF, and config
-- [ ] CSRF is enabled for the SPA (`csrf.spa()` or an equivalent cookie repository). It is not disabled globally.
+- [ ] CSRF is enabled for the SPA (`CookieCsrfTokenRepository.withHttpOnlyFalse()` + `SpaCsrfTokenRequestHandler`). It is not disabled globally.
+- [ ] The request cache is disabled, so anonymous requests never create session rows.
 - [ ] The session cookie is `HttpOnly` and `SameSite=Lax` or stricter. The session ID is rotated on login (session fixation protection).
 - [ ] Logout invalidates the session and clears the cookie.
 - [ ] Login failures return a generic message that does not reveal whether an email is registered.

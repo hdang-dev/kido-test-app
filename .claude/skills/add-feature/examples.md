@@ -7,14 +7,12 @@
 ```java
 package com.kido.testapp.user;
 
+import com.kido.testapp.common.ValidPassword;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 
 public record ChangePasswordRequest(
         @NotBlank String currentPassword,
-        @NotBlank @Size(min = 8, max = 72) // BCrypt ignores bytes past 72 (design.md §8)
-        @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*\\d).+$", message = "must contain a letter and a digit")
+        @ValidPassword // PasswordPolicy: 8+ chars, <= 72 bytes, letter + digit (design.md §8)
         String newPassword,
         @NotBlank String confirmPassword) {
 }
@@ -39,13 +37,13 @@ public class UserService {
         AppUser user = repository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("Authenticated user not found"));
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
-            throw new InvalidPasswordException("currentPassword", "Current password is incorrect");
+            throw ApiException.field(HttpStatus.BAD_REQUEST, "currentPassword", "Current password is incorrect");
         }
         if (!request.newPassword().equals(request.confirmPassword())) {
-            throw new InvalidPasswordException("confirmPassword", "Passwords do not match");
+            throw ApiException.field(HttpStatus.BAD_REQUEST, "confirmPassword", "Passwords do not match");
         }
         if (passwordEncoder.matches(request.newPassword(), user.getPasswordHash())) {
-            throw new InvalidPasswordException("newPassword", "New password must differ from the current one");
+            throw ApiException.field(HttpStatus.BAD_REQUEST, "newPassword", "New password must differ from the current one");
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
     }
@@ -75,16 +73,15 @@ public class MeController {
 
 ## Backend: Test (`user/MeControllerTest.java`)
 ```java
-@SpringBootTest
-@AutoConfigureMockMvc
-@Import(TestcontainersConfiguration.class) // always: tests must never hit the dev database (design.md D7)
+@IntegrationTest // Testcontainers + test profile; never plain @SpringBootTest (design.md D7)
 class MeControllerTest {
 
     @Autowired MockMvc mvc;
 
     @Test
     void anonymousGets401() throws Exception {
-        mvc.perform(put("/api/me/password").with(csrf())
+        // SpaCsrf, never spring-security-test's csrf(): that one breaks XSRF cookies for later tests
+        mvc.perform(put("/api/me/password").with(SpaCsrf.token(mvc))
                         .contentType(APPLICATION_JSON).content("{}"))
            .andExpect(status().isUnauthorized());
     }

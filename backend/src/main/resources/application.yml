@@ -12,6 +12,10 @@ spring:
     open-in-view: false
   flyway:
     locations: classpath:db/migration
+  session:
+    timeout: 30m          # idle timeout (design.md §6)
+    jdbc:
+      initialize-schema: never  # Flyway V2 owns the session tables
 
 server:
   port: 8080

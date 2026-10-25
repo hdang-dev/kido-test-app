@@ -31,7 +31,7 @@ A monorepo for a pre-interview test. It is a small auth app with sign up, login 
 - One phase = one branch `phase/N-name` = one PR to `main`. Use small conventional commits.
 - Docs ship with code. Update `design.md` (the phase status and anything else affected) in the same PR.
 - Before opening a PR, `mvn test`, `npm test`, and `npm run build` must be green, and the `security-review` skill must have been run.
-- The owner reviews the whole phase in the PR and merges it. Address review comments with new commits, and never push to `main` or rewrite pushed history.
+- The owner reviews the whole phase in the PR. Merge only on the owner's LGTM, and always as a **squash merge**. Address review comments with new commits, and never push to `main` or rewrite pushed history.
 
 ## Skills
 - `.claude/skills/add-feature`: use it when adding an endpoint and/or page

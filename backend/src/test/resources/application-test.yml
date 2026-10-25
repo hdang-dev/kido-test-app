@@ -1,0 +1,5 @@
+# Test profile (activated by @IntegrationTest). The datasource comes from Testcontainers.
+app:
+  super-admin:
+    email: root@test.local
+    password: RootPass123
