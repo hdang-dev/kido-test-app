@@ -60,6 +60,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup").permitAll()
                         .requestMatchers("/error").permitAll()
+                        .requestMatchers("/api/me", "/api/me/**").authenticated()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN") // SUPER_ADMIN via the hierarchy
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex

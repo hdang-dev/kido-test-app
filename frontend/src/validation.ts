@@ -1,6 +1,8 @@
 // Client-side mirrors of backend rules (design.md §8) — for fast feedback only; the backend is the authority.
 
 export const PASSWORD_MESSAGE = 'Password must be 8-72 characters with at least one letter and one digit';
+export const USERNAME_MAX = 50;
+export const BIO_MAX = 500;
 
 // Same shape the backend accepts: something@something.tld
 export function emailError(email: string): string | undefined {
@@ -20,3 +22,12 @@ export function passwordError(password: string): string | undefined {
   }
   return undefined;
 }
+
+// Mirrors @MaxLength: the trimmed value, counted in code points (an emoji is 1, like Postgres varchar).
+export const textLength = (value: string) => [...value.trim()].length;
+
+export const usernameError = (username: string) =>
+  textLength(username) > USERNAME_MAX ? `Username must be at most ${USERNAME_MAX} characters` : undefined;
+
+export const bioError = (bio: string) =>
+  textLength(bio) > BIO_MAX ? `Bio must be at most ${BIO_MAX} characters` : undefined;

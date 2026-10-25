@@ -5,7 +5,7 @@ import { ApiError } from '../api/client';
 import { AuthCard } from '../components/AuthCard';
 import { FormField } from '../components/FormField';
 import { useAuth } from '../context/AuthContext';
-import { emailError, passwordError } from '../validation';
+import { bioError, emailError, passwordError, usernameError } from '../validation';
 
 const EMPTY = { email: '', password: '', confirmPassword: '', username: '', bio: '' };
 type Form = typeof EMPTY;
@@ -17,9 +17,10 @@ function validate(form: Form): Record<string, string> {
   const password = passwordError(form.password);
   if (password) errors.password = password;
   if (form.confirmPassword !== form.password) errors.confirmPassword = 'Passwords do not match';
-  // Lengths of what is actually sent (trimmed), as the backend sees it
-  if (form.username.trim().length > 50) errors.username = 'Username must be at most 50 characters';
-  if (form.bio.trim().length > 500) errors.bio = 'Bio must be at most 500 characters';
+  const username = usernameError(form.username);
+  if (username) errors.username = username;
+  const bio = bioError(form.bio);
+  if (bio) errors.bio = bio;
   return errors;
 }
 

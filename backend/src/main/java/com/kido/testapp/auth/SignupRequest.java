@@ -1,5 +1,6 @@
 package com.kido.testapp.auth;
 
+import com.kido.testapp.common.MaxLength;
 import com.kido.testapp.common.ValidPassword;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -12,8 +13,8 @@ public record SignupRequest(
         String email,
         @ValidPassword String password,
         @NotBlank String confirmPassword,
-        @Size(max = 50) String username,
-        @Size(max = 500) String bio) {
+        @MaxLength(50) String username,
+        @MaxLength(500) String bio) {
 
     @Override
     public String toString() {

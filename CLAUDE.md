@@ -34,5 +34,5 @@ A monorepo for a pre-interview test. It is a small auth app with sign up, login 
 - The owner reviews the whole phase in the PR. Merge only on the owner's LGTM, and always as a **squash merge**. Address review comments with new commits, and never push to `main` or rewrite pushed history.
 
 ## Skills
-- `.claude/skills/add-feature`: use it when adding an endpoint and/or page
+- `.claude/skills/add-feature`: use it when adding an endpoint and/or page. Its `examples.md` points at the real change-password flow
 - `.claude/skills/security-review`: run it before calling a phase done

@@ -104,7 +104,7 @@ All endpoints sit under `/api` and use JSON. Errors are returned as `ErrorRespon
 | POST | `/api/auth/login` | public | `{email, password, rememberMe}` → `200 MeResponse` · `401` |
 | POST | `/api/auth/logout` | authenticated | → `204` |
 | GET  | `/api/me` | authenticated | → `200 MeResponse` · `401` |
-| PUT  | `/api/me` | authenticated | `{username, bio}` → `200 MeResponse` · `400` |
+| PUT  | `/api/me` | authenticated | `{username, bio}` → `200 MeResponse` · `400`. Trimmed; a blank username resets to the email local part, a blank bio clears it. Email and role cannot be changed here |
 | PUT  | `/api/me/password` | authenticated | `{currentPassword, newPassword, confirmPassword}` → `204` · `400` |
 | GET  | `/api/admin/users?page=&size=` | ADMIN+ | → `200 Page<UserSummary>` |
 | PUT  | `/api/admin/users/{id}/role` | ADMIN+ (per §5) | `{role: "ADMIN" \| "USER"}` → `200 UserSummary` · `400` · `403` · `404` |
@@ -116,8 +116,8 @@ All endpoints sit under `/api` and use JSON. Errors are returned as `ErrorRespon
 |-------|------|
 | email | Required, valid format, max 254 characters, unique (case-insensitive) |
 | password | At least 8 characters and at most **72 UTF-8 bytes** (BCrypt's hard limit; Vietnamese letters take 2–3 bytes each), with at least one letter and one digit. Must equal `confirmPassword`. Enforced by `@ValidPassword` → `PasswordPolicy` |
-| username | Optional at sign-up (blank → email local part), max 50 characters, trimmed |
-| bio | Optional, max 500 characters |
+| username | Optional at sign-up (blank → email local part). On profile edit it is required in the body, and blank resets it to the default. Max **50 characters, counted as code points after trimming** (`@MaxLength`, same unit as Postgres `varchar`) |
+| bio | Optional; blank clears it. Max **500** code points after trimming (`@MaxLength`) |
 
 Validation runs on both sides: on the frontend for UX, and on the backend as the authority.
 
@@ -132,7 +132,7 @@ Validation runs on both sides: on the frontend for UX, and on the backend as the
 ## 10. Known trade-offs
 - Sign-up's "email already used" lets someone check whether an email is registered. The feature asks for it explicitly, so it is accepted.
 - There is no email verification and no "forgot password" flow (out of scope).
-- There is no login rate limiting or lockout (out of scope; would be listed as next steps).
+- There is no rate limiting or lockout on login **or on the current-password check of the password change** (out of scope; first item for Phase 5 / next steps).
 
 ## 11. Delivery process
 - **One phase = one branch (`phase/N-name`) = one PR to `main`.** The PR description lists what changed and how it was verified.
@@ -147,7 +147,7 @@ Validation runs on both sides: on the frontend for UX, and on the backend as the
 |---|-------|-------|--------|----|
 | 0 | Foundation | git and GitHub, monorepo scaffold, docker-compose Postgres, Flyway, Testcontainers, Tailwind, docs and skills | ✅ done | [#1](https://github.com/hdang-dev/kido-test-app/pull/1) |
 | 1 | Security core | `V1` and `V2` migrations, `AppUser`, `UserDetailsService`, `SecurityConfig` (session, CSRF, 401/403 JSON, role hierarchy), Spring Session JDBC, `SuperAdminSeeder`, `GlobalExceptionHandler` | ✅ done | [#2](https://github.com/hdang-dev/kido-test-app/pull/2) |
-| 2 | Sign up / Login / Logout | Signup, login (remember me), logout, and `/api/me` on BE and FE; `SignupPage`, `LoginPage`, auth context, guards. Login must rotate the session ID and CSRF token and persist the context (§6) | 🔵 in review | [#3](https://github.com/hdang-dev/kido-test-app/pull/3) |
-| 3 | Profile | Edit username and bio, change password (expires other sessions), BE and FE tests | ⬜ | |
+| 2 | Sign up / Login / Logout | Signup, login (remember me), logout, and `/api/me` on BE and FE; `SignupPage`, `LoginPage`, auth context, guards. Login must rotate the session ID and CSRF token and persist the context (§6) | ✅ done | [#3](https://github.com/hdang-dev/kido-test-app/pull/3) |
+| 3 | Profile | Edit username and bio, change password (expires other sessions), BE and FE tests | 🔵 in review | [#4](https://github.com/hdang-dev/kido-test-app/pull/4) |
 | 4 | User management | Paginated list, grant and revoke admin per §5, session expiry on role change, RBAC tests | ⬜ | |
 | 5 | Hardening and wrap-up | `security-review` skill pass and fixes, README, demo script | ⬜ | |

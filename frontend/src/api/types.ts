@@ -23,3 +23,14 @@ export interface LoginRequest {
   password: string;
   rememberMe: boolean;
 }
+
+export interface UpdateProfileRequest {
+  username: string;
+  bio: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
