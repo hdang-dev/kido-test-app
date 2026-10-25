@@ -47,6 +47,9 @@ public class SecurityConfig {
                         .accessDeniedHandler((req, res, e) ->
                                 writeError(res, objectMapper, HttpStatus.FORBIDDEN, "Access denied")))
                 .sessionManagement(session -> session.sessionFixation(fixation -> fixation.changeSessionId()))
+                // No "redirect back after login" for a JSON API — and saving the request would create a
+                // session row (Spring Session JDBC) for every anonymous 401.
+                .requestCache(cache -> cache.disable())
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout") // POST only, CSRF-protected
                         .invalidateHttpSession(true)

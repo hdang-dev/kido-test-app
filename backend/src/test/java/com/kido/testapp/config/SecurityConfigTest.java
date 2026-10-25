@@ -35,6 +35,12 @@ class SecurityConfigTest {
     }
 
     @Test
+    void anonymousRequestDoesNotCreateASession() throws Exception {
+        var response = mvc.perform(get("/api/me")).andReturn().getResponse();
+        assertThat(response.getCookie("SESSION")).isNull();
+    }
+
+    @Test
     void anyResponseIssuesReadableCsrfCookie() throws Exception {
         Cookie cookie = mvc.perform(get("/api/me")).andReturn().getResponse().getCookie("XSRF-TOKEN");
         assertThat(cookie).isNotNull();
