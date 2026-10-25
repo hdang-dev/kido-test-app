@@ -116,8 +116,8 @@ All endpoints sit under `/api` and use JSON. Errors are returned as `ErrorRespon
 |-------|------|
 | email | Required, valid format, max 254 characters, unique (case-insensitive) |
 | password | At least 8 characters and at most **72 UTF-8 bytes** (BCrypt's hard limit; Vietnamese letters take 2–3 bytes each), with at least one letter and one digit. Must equal `confirmPassword`. Enforced by `@ValidPassword` → `PasswordPolicy` |
-| username | Optional at sign-up (blank → email local part), max 50 characters, trimmed |
-| bio | Optional, max 500 characters |
+| username | Optional at sign-up (blank → email local part). On profile edit it is required in the body, and blank resets it to the default. Max **50 characters, counted as code points after trimming** (`@MaxLength`, same unit as Postgres `varchar`) |
+| bio | Optional; blank clears it. Max **500** code points after trimming (`@MaxLength`) |
 
 Validation runs on both sides: on the frontend for UX, and on the backend as the authority.
 
@@ -132,7 +132,7 @@ Validation runs on both sides: on the frontend for UX, and on the backend as the
 ## 10. Known trade-offs
 - Sign-up's "email already used" lets someone check whether an email is registered. The feature asks for it explicitly, so it is accepted.
 - There is no email verification and no "forgot password" flow (out of scope).
-- There is no login rate limiting or lockout (out of scope; would be listed as next steps).
+- There is no rate limiting or lockout on login **or on the current-password check of the password change** (out of scope; first item for Phase 5 / next steps).
 
 ## 11. Delivery process
 - **One phase = one branch (`phase/N-name`) = one PR to `main`.** The PR description lists what changed and how it was verified.

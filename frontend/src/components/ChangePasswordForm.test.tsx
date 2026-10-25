@@ -70,5 +70,6 @@ describe('ChangePasswordForm', () => {
 
     expect(await screen.findByText('Current password is incorrect')).toBeInTheDocument();
     expect(screen.getByLabelText('Current password')).toHaveValue('');
+    expect(screen.getByLabelText('New password')).toHaveValue('N3wPassword!'); // no retyping after a typo
   });
 });

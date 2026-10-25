@@ -6,8 +6,8 @@ import { FormField } from './FormField';
 
 const EMPTY = { currentPassword: '', newPassword: '', confirmPassword: '' };
 
-// Self-service password change (design.md §6). Fields are cleared after every submit attempt that
-// reaches the server, so passwords don't linger in the DOM.
+// Self-service password change (design.md §6). All fields are cleared on success; on a server error
+// only the current password is cleared, so a typo there doesn't force retyping the new one.
 export function ChangePasswordForm() {
   const [form, setForm] = useState(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -31,13 +31,14 @@ export function ChangePasswordForm() {
     setSubmitting(true);
     try {
       await changePassword(form);
+      setForm(EMPTY);
       setMessage('Password changed. Your other devices have been signed out.');
     } catch (err) {
+      setForm((f) => ({ ...f, currentPassword: '' }));
       setErrors(err instanceof ApiError && Object.keys(err.fieldErrors).length > 0
         ? err.fieldErrors
         : { _: err instanceof ApiError ? err.message : 'Could not change the password, please try again' });
     } finally {
-      setForm(EMPTY);
       setSubmitting(false);
     }
   };

@@ -3,8 +3,8 @@ import { ApiError } from '../api/client';
 import { updateProfile } from '../api/me';
 import type { MeResponse, Role } from '../api/types';
 import { useAuth } from '../context/AuthContext';
-import { FormField } from './FormField';
-import { TextAreaField } from './TextAreaField';
+import { BIO_MAX, bioError, textLength, usernameError } from '../validation';
+import { FormField, TextAreaField } from './FormField';
 
 const ROLE_LABEL: Record<Role, string> = { USER: 'User', ADMIN: 'Admin', SUPER_ADMIN: 'Super admin' };
 
@@ -34,8 +34,10 @@ export function ProfileDetails({ user }: { user: MeResponse }) {
   const onSave = async (e: FormEvent) => {
     e.preventDefault();
     const clientErrors: Record<string, string> = {};
-    if (username.trim().length > 50) clientErrors.username = 'Username must be at most 50 characters';
-    if (bio.trim().length > 500) clientErrors.bio = 'Bio must be at most 500 characters';
+    const usernameProblem = usernameError(username);
+    if (usernameProblem) clientErrors.username = usernameProblem;
+    const bioProblem = bioError(bio);
+    if (bioProblem) clientErrors.bio = bioProblem;
     setErrors(clientErrors);
     if (Object.keys(clientErrors).length > 0) return;
 
@@ -81,10 +83,10 @@ export function ProfileDetails({ user }: { user: MeResponse }) {
       ) : (
         <form onSubmit={onSave} className="space-y-4" noValidate>
           <FormField label="Email" value={user.email} disabled readOnly hint="Email cannot be changed" />
-          <FormField label="Username" value={username} error={errors.username} maxLength={50}
+          <FormField label="Username" value={username} error={errors.username}
             hint="Leave empty to use the part of your email before @"
             onChange={(e) => setUsername(e.target.value)} />
-          <TextAreaField label="Bio" value={bio} error={errors.bio} hint={`${bio.trim().length}/500`}
+          <TextAreaField label="Bio" value={bio} error={errors.bio} hint={`${textLength(bio)}/${BIO_MAX}`}
             onChange={(e) => setBio(e.target.value)} />
           {errors._ && <p role="alert" className="text-sm text-red-600">{errors._}</p>}
           <div className="flex gap-2">
