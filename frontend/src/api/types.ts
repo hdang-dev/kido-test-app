@@ -34,3 +34,19 @@ export interface ChangePasswordRequest {
   newPassword: string;
   confirmPassword: string;
 }
+
+export interface UserSummary {
+  id: string;
+  email: string;
+  username: string;
+  role: Role;
+  createdAt: string; // ISO-8601 instant
+}
+
+export interface Page<T> {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}

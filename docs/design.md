@@ -34,6 +34,7 @@ Browser ──► Vite dev server :5173 ──/api proxy──► Spring Boot :8
 | D6 | **Flyway owns the schema** (`ddl-auto: validate`) | The schema is versioned in git and reviewable. Tests run the same migrations. | `ddl-auto: update`: invisible, unreviewable schema drift |
 | D7 | **Testcontainers Postgres in tests** | Tests use the same DB engine and migrations as the real app. | H2: dialect differences hide bugs (requires Docker running for `mvn test`) |
 | D8 | **UUID primary keys** | IDs exposed in URLs and API responses don't reveal the user count and can't be guessed (defence in depth; authorization is the real protection). Postgres generates them natively. | `bigserial`: sequential and enumerable. UUIDv7: time-ordered, but Postgres 16 can't generate it natively and it isn't needed at this scale |
+| D9 | **Re-check the role on every request** (`CurrentRoleFilter`) | Sessions store authorities from login time. Sweeping sessions on a role change narrows the stale window but can't close it (a login in flight can save a session with the old role). One indexed query per request closes it. | Sweeps only: racy. Reloading full `UserDetails` per request: more work for the same guarantee |
 
 ## 4. Domain and schema
 **`app_user`** (Flyway `V1`)
@@ -65,7 +66,8 @@ Rules enforced in `AdminUserService`:
 - Nobody can change their own role.
 - The SUPER_ADMIN can never be the target of a role change.
 - `SUPER_ADMIN` is not an accepted value in role-change requests.
-- A role change **expires all sessions of the target user**, so their new authorities take effect immediately.
+- A role change takes effect **on the target's very next request**: `CurrentRoleFilter` compares the role in the session with the database on every authenticated request and signs out a stale session (D9). After commit, all of the target's sessions are also swept so they're signed out everywhere at once. That sweep is a courtesy: if it fails, it is logged, and the filter still guarantees the outcome.
+- Concurrency: the actor row is read `FOR SHARE` and the target row `FOR UPDATE`, so an admin being revoked can't finish a grant afterwards, and concurrent changes to one user are serialised.
 
 **Bootstrap:** on startup, `SuperAdminSeeder` creates the SUPER_ADMIN from `APP_SUPER_ADMIN_EMAIL` / `APP_SUPER_ADMIN_PASSWORD` **only if none exists**. It never overwrites an existing account, and the credentials never appear in Flyway files.
 Recovery after losing the super admin password requires manual DB access (an accepted trade-off at this scope).
@@ -106,10 +108,10 @@ All endpoints sit under `/api` and use JSON. Errors are returned as `ErrorRespon
 | GET  | `/api/me` | authenticated | → `200 MeResponse` · `401` |
 | PUT  | `/api/me` | authenticated | `{username, bio}` → `200 MeResponse` · `400`. Trimmed; a blank username resets to the email local part, a blank bio clears it. Email and role cannot be changed here |
 | PUT  | `/api/me/password` | authenticated | `{currentPassword, newPassword, confirmPassword}` → `204` · `400` |
-| GET  | `/api/admin/users?page=&size=` | ADMIN+ | → `200 Page<UserSummary>` |
-| PUT  | `/api/admin/users/{id}/role` | ADMIN+ (per §5) | `{role: "ADMIN" \| "USER"}` → `200 UserSummary` · `400` · `403` · `404` |
+| GET  | `/api/admin/users?page=&size=` | ADMIN+ | `page` ≥ 0 (default 0), `size` 1–100 (default 20) → `200 PageResponse<UserSummary>`, newest first · `400` |
+| PUT  | `/api/admin/users/{id}/role` | ADMIN+ (per §5) | `{role: "ADMIN" \| "USER"}` → `200 UserSummary` · `400` (e.g. `SUPER_ADMIN` requested) · `403` (rule broken) · `404`. Setting the current role is a no-op that keeps sessions |
 
-`MeResponse` = `{id (uuid string), email, username, bio, role}` · `UserSummary` = `{id, email, username, role, createdAt}`. Neither ever includes the hash.
+`MeResponse` = `{id (uuid string), email, username, bio, role}` · `UserSummary` = `{id, email, username, role, createdAt}`. Neither ever includes the hash. `PageResponse` = `{content, page, size, totalElements, totalPages}`.
 
 ## 8. Validation rules
 | Field | Rule |
@@ -148,6 +150,6 @@ Validation runs on both sides: on the frontend for UX, and on the backend as the
 | 0 | Foundation | git and GitHub, monorepo scaffold, docker-compose Postgres, Flyway, Testcontainers, Tailwind, docs and skills | ✅ done | [#1](https://github.com/hdang-dev/kido-test-app/pull/1) |
 | 1 | Security core | `V1` and `V2` migrations, `AppUser`, `UserDetailsService`, `SecurityConfig` (session, CSRF, 401/403 JSON, role hierarchy), Spring Session JDBC, `SuperAdminSeeder`, `GlobalExceptionHandler` | ✅ done | [#2](https://github.com/hdang-dev/kido-test-app/pull/2) |
 | 2 | Sign up / Login / Logout | Signup, login (remember me), logout, and `/api/me` on BE and FE; `SignupPage`, `LoginPage`, auth context, guards. Login must rotate the session ID and CSRF token and persist the context (§6) | ✅ done | [#3](https://github.com/hdang-dev/kido-test-app/pull/3) |
-| 3 | Profile | Edit username and bio, change password (expires other sessions), BE and FE tests | 🔵 in review | [#4](https://github.com/hdang-dev/kido-test-app/pull/4) |
-| 4 | User management | Paginated list, grant and revoke admin per §5, session expiry on role change, RBAC tests | ⬜ | |
+| 3 | Profile | Edit username and bio, change password (expires other sessions), BE and FE tests | ✅ done | [#4](https://github.com/hdang-dev/kido-test-app/pull/4) |
+| 4 | User management | Paginated list, grant and revoke admin per §5, session expiry on role change, RBAC tests | 🔵 in review | [#5](https://github.com/hdang-dev/kido-test-app/pull/5) |
 | 5 | Hardening and wrap-up | `security-review` skill pass and fixes, README, demo script | ⬜ | |

@@ -1,7 +1,6 @@
 package com.kido.testapp.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -10,11 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import jakarta.servlet.http.Cookie;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kido.testapp.AuthTestClient;
 import com.kido.testapp.IntegrationTest;
 import com.kido.testapp.SpaCsrf;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -25,6 +24,11 @@ import org.springframework.test.web.servlet.MockMvc;
 class SecurityConfigTest {
 
     @Autowired MockMvc mvc;
+    @Autowired ObjectMapper json;
+
+    private AuthTestClient client() {
+        return new AuthTestClient(mvc, json);
+    }
 
     @Test
     void anonymousApiCallGetsJson401NotRedirect() throws Exception {
@@ -70,19 +74,18 @@ class SecurityConfigTest {
     }
 
     @Test
-    @WithMockUser(roles = "USER")
     void userIsForbiddenFromAdminApi() throws Exception {
-        mvc.perform(get("/api/admin/users"))
+        Cookie user = client().signup(AuthTestClient.uniqueEmail());
+        mvc.perform(get("/api/admin/users").cookie(user))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("Access denied"));
     }
 
-    /** 404 = passed authorization; the endpoint itself arrives in phase 4. */
-    @ParameterizedTest
-    @ValueSource(strings = {"ADMIN", "SUPER_ADMIN"})
-    void adminsPassAdminApiAuthorization(String role) throws Exception {
-        mvc.perform(get("/api/admin/users").with(user("a@test.local").roles(role)))
-                .andExpect(status().isNotFound());
+    /** The role hierarchy lets SUPER_ADMIN through hasRole(ADMIN) (ADMIN itself: AdminControllerTest). */
+    @Test
+    void superAdminPassesAdminApiAuthorization() throws Exception {
+        Cookie root = client().login("root@test.local", "RootPass123");
+        mvc.perform(get("/api/admin/users").cookie(root)).andExpect(status().isOk());
     }
 
     @Test

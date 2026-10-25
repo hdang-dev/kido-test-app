@@ -7,7 +7,9 @@ import java.util.List;
 import jakarta.servlet.http.HttpServletResponse;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kido.testapp.auth.CurrentRoleFilter;
 import com.kido.testapp.common.ErrorResponse;
+import com.kido.testapp.user.AppUserRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -35,6 +37,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
@@ -51,12 +54,15 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper,
                                             CsrfTokenRepository csrfTokenRepository,
-                                            SecurityContextRepository securityContextRepository) throws Exception {
+                                            SecurityContextRepository securityContextRepository,
+                                            AppUserRepository appUserRepository) throws Exception {
         http
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()))
                 .securityContext(context -> context.securityContextRepository(securityContextRepository))
+                // Stale role in the session (changed since login) -> signed out before authorization (design.md §5)
+                .addFilterBefore(new CurrentRoleFilter(appUserRepository), AuthorizationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup").permitAll()
                         .requestMatchers("/error").permitAll()
