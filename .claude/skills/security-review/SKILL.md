@@ -12,7 +12,7 @@ For each item, report **PASS**, **FAIL**, or **N/A**, with `file:line` evidence.
 - [ ] Every controller route has a matching rule in `SecurityConfig`. Only `/api/auth/login` and `/api/auth/signup` are `permitAll`, and the catch-all is `anyRequest().authenticated()`.
 - [ ] `/api/admin/**` requires `ROLE_ADMIN` (the role hierarchy `SUPER_ADMIN > ADMIN > USER` is configured), and admin service methods also carry `@PreAuthorize`.
 - [ ] Role rules from `design.md` §5 hold: only SUPER_ADMIN can revoke ADMIN, nobody changes their own role, SUPER_ADMIN is never a target, and `SUPER_ADMIN` is rejected as a requested role.
-- [ ] A role change expires all of the target user's sessions, so stale authorities don't survive.
+- [ ] Stale authorities can't survive a role change: `CurrentRoleFilter` is registered before `AuthorizationFilter`, and role-change code locks the actor (`FOR SHARE`) and target (`FOR UPDATE`) rows.
 - [ ] Self-service endpoints take the identity from the security context, never from a path, query, or body parameter (no IDOR).
 - [ ] Unauthenticated API calls get a `401` JSON response, not a `302` to a login page.
 - [ ] Tests exist for 401 (anonymous), 403 (wrong role), and 403 (missing CSRF token).

@@ -22,7 +22,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /**
  * User management (design.md §5). Every method is ADMIN+ by @PreAuthorize — a second layer behind the
- * /api/admin/** URL rule. The actor's role is read from the database, not from session authorities.
+ * /api/admin/** URL rule. The actor's role is read from the database (locked), not from session authorities.
  */
 @Service
 @PreAuthorize("hasRole('ADMIN')")
@@ -40,22 +40,28 @@ public class AdminUserService {
 
     @Transactional(readOnly = true)
     public Page<AppUser> list(int page, int size) {
+        // Matches index ix_app_user_created_at (V3)
         return repository.findAll(PageRequest.of(page, size, Sort.by("createdAt").descending().and(Sort.by("id"))));
     }
 
     /**
      * Grant (USER → ADMIN): any ADMIN+. Revoke (ADMIN → USER): SUPER_ADMIN only. Nobody changes their
-     * own role, the SUPER_ADMIN is never a target, and SUPER_ADMIN can never be granted. A real change
-     * expires all of the target's sessions so stale authorities can't outlive it.
+     * own role, the SUPER_ADMIN is never a target, and SUPER_ADMIN can never be granted.
+     *
+     * <p>Concurrency: the actor row is read FOR SHARE (an admin being revoked right now can't finish a
+     * grant afterwards), the target row FOR UPDATE (concurrent changes to one user are serialised).
      */
     @Transactional
     public AppUser changeRole(String actorEmail, UUID targetId, Role newRole) {
         if (newRole == Role.SUPER_ADMIN) {
             throw ApiException.field(HttpStatus.BAD_REQUEST, "role", "Role must be ADMIN or USER");
         }
-        AppUser actor = repository.findByEmail(Emails.normalise(actorEmail))
+        AppUser actor = repository.findByEmailForShare(Emails.normalise(actorEmail))
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Authentication required"));
-        AppUser target = repository.findById(targetId)
+        if (actor.getRole() == Role.USER) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Access denied"); // demoted since the request started
+        }
+        AppUser target = repository.findByIdForUpdate(targetId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
 
         if (target.getId().equals(actor.getId())) {
@@ -73,21 +79,25 @@ public class AdminUserService {
 
         Role previous = target.getRole();
         target.setRole(newRole);
-        expireSessionsNowAndAfterCommit(target.getEmail());
+        signOutAfterCommit(target.getEmail());
         log.info("{} changed role of {} from {} to {}", actor.getEmail(), target.getEmail(), previous, newRole);
         return target;
     }
 
     /**
-     * Now: if this fails, the role change rolls back (never "demoted, but the admin session still works").
-     * After commit: also kills a session the target created during this transaction with the old role.
+     * Courtesy sweep so the target is signed out everywhere right away. Correctness doesn't depend on it:
+     * CurrentRoleFilter drops any session whose role no longer matches the database. So a failure here is
+     * logged, never turned into an error for a change that has already committed.
      */
-    private void expireSessionsNowAndAfterCommit(String email) {
-        userSessions.expireAll(email);
+    private void signOutAfterCommit(String email) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                userSessions.expireAll(email);
+                try {
+                    userSessions.expireAll(email);
+                } catch (RuntimeException e) {
+                    log.warn("Could not expire sessions of {} after role change; CurrentRoleFilter will", email, e);
+                }
             }
         });
     }

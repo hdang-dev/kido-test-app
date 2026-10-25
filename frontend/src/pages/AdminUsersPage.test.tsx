@@ -107,4 +107,41 @@ describe('AdminUsersPage', () => {
     expect(adminApi.listUsers).toHaveBeenLastCalledWith(1, 20);
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
   });
+
+  it('keeps label and buttons on the shown page when loading the next page fails', async () => {
+    vi.mocked(useAuth).mockReturnValue(authState(ME));
+    vi.mocked(adminApi.listUsers)
+      .mockResolvedValueOnce(pageOf([USERS[2]], 3, 0))
+      .mockRejectedValueOnce(new ApiError(503, 'Service Unavailable'))
+      .mockResolvedValueOnce(pageOf([USERS[3]], 3, 1));
+    render(<AdminUsersPage />);
+
+    await screen.findByText('Page 1 of 3');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Service Unavailable');
+    expect(screen.getByText('Page 1 of 3')).toBeInTheDocument(); // still describes what is shown
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next' })); // retries page 2, doesn't skip it
+    expect(await screen.findByText('trinity@test.local')).toBeInTheDocument();
+    expect(adminApi.listUsers).toHaveBeenLastCalledWith(1, 20);
+  });
+
+  it('ignores a slow response for a page the user already left', async () => {
+    vi.mocked(useAuth).mockReturnValue(authState(ME));
+    let resolveSlow!: (p: Page<UserSummary>) => void;
+    vi.mocked(adminApi.listUsers)
+      .mockResolvedValueOnce(pageOf([USERS[2]], 3, 0))
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveSlow = resolve)))
+      .mockResolvedValueOnce(pageOf([row('z', 'zion@test.local', 'USER')], 3, 0));
+    render(<AdminUsersPage />);
+
+    await screen.findByText('Page 1 of 3');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));   // slow request for page 2
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));   // newer request, answered first
+    expect(await screen.findByText('zion@test.local')).toBeInTheDocument();
+
+    resolveSlow(pageOf([row('old', 'stale@test.local', 'USER')], 3, 1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText('stale@test.local')).not.toBeInTheDocument();
+  });
 });

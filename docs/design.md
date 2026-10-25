@@ -34,6 +34,7 @@ Browser ──► Vite dev server :5173 ──/api proxy──► Spring Boot :8
 | D6 | **Flyway owns the schema** (`ddl-auto: validate`) | The schema is versioned in git and reviewable. Tests run the same migrations. | `ddl-auto: update`: invisible, unreviewable schema drift |
 | D7 | **Testcontainers Postgres in tests** | Tests use the same DB engine and migrations as the real app. | H2: dialect differences hide bugs (requires Docker running for `mvn test`) |
 | D8 | **UUID primary keys** | IDs exposed in URLs and API responses don't reveal the user count and can't be guessed (defence in depth; authorization is the real protection). Postgres generates them natively. | `bigserial`: sequential and enumerable. UUIDv7: time-ordered, but Postgres 16 can't generate it natively and it isn't needed at this scale |
+| D9 | **Re-check the role on every request** (`CurrentRoleFilter`) | Sessions store authorities from login time. Sweeping sessions on a role change narrows the stale window but can't close it (a login in flight can save a session with the old role). One indexed query per request closes it. | Sweeps only: racy. Reloading full `UserDetails` per request: more work for the same guarantee |
 
 ## 4. Domain and schema
 **`app_user`** (Flyway `V1`)
@@ -65,7 +66,8 @@ Rules enforced in `AdminUserService`:
 - Nobody can change their own role.
 - The SUPER_ADMIN can never be the target of a role change.
 - `SUPER_ADMIN` is not an accepted value in role-change requests.
-- A role change **expires all sessions of the target user**, so their new authorities take effect immediately. Expiry runs inside the transaction (if it fails, the change rolls back) and again after commit (closing the window where the target logs in mid-change with the old role).
+- A role change takes effect **on the target's very next request**: `CurrentRoleFilter` compares the role in the session with the database on every authenticated request and signs out a stale session (D9). After commit, all of the target's sessions are also swept so they're signed out everywhere at once. That sweep is a courtesy: if it fails, it is logged, and the filter still guarantees the outcome.
+- Concurrency: the actor row is read `FOR SHARE` and the target row `FOR UPDATE`, so an admin being revoked can't finish a grant afterwards, and concurrent changes to one user are serialised.
 
 **Bootstrap:** on startup, `SuperAdminSeeder` creates the SUPER_ADMIN from `APP_SUPER_ADMIN_EMAIL` / `APP_SUPER_ADMIN_PASSWORD` **only if none exists**. It never overwrites an existing account, and the credentials never appear in Flyway files.
 Recovery after losing the super admin password requires manual DB access (an accepted trade-off at this scope).
