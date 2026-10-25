@@ -1,11 +1,11 @@
-// Mirrors backend DTOs — keep in sync with docs/design.md "API".
+// Mirrors backend DTOs — keep in sync with docs/design.md §7 "API".
 
-export type Role = 'ADMIN' | 'USER';
+export type Role = 'USER' | 'ADMIN' | 'SUPER_ADMIN';
 
-export interface CurrentUser {
+export interface MeResponse {
   id: string; // UUID
-  username: string;
-  fullName: string;
   email: string;
+  username: string;
+  bio: string | null;
   role: Role;
 }

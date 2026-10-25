@@ -138,12 +138,14 @@ Validation runs on both sides: on the frontend for UX, and on the backend as the
 - Commits are small conventional commits: `feat(auth): …`, `test(user): …`, `docs: …`, `chore: …`.
 - **Docs ship with the code.** Every PR updates this file (status, API, and decisions where relevant), plus `CLAUDE.md`, the README, or the skills if they are affected.
 - Before merging, `mvn test`, `npm test`, and `npm run build` must all be green, and the `security-review` skill must have been run on the diff.
+- **Review happens per phase, in the PR.** The project owner reviews the whole phase and leaves comments. Each comment is addressed with a new commit on the same branch, and pushed history is never rewritten. **Only the owner merges.** Nothing is pushed directly to `main`.
+- **Phase status:** a phase's own PR marks it 🔵 *in review*. The next phase's PR flips it to ✅ *done* once it has been merged, because nobody pushes to `main` just to update a status.
 
 ## 12. Phases
 | # | Phase | Scope | Status | PR |
 |---|-------|-------|--------|----|
-| 0 | Foundation | git and GitHub, monorepo scaffold, docker-compose Postgres, Flyway, Tailwind, docs and skills | 🟡 in progress | |
-| 1 | Security core | `V1` and `V2` migrations, `AppUser`, `UserDetailsService`, `SecurityConfig` (session, CSRF, 401/403 JSON, role hierarchy), Spring Session JDBC, `SuperAdminSeeder`, `GlobalExceptionHandler`, Testcontainers base test | ⬜ | |
+| 0 | Foundation | git and GitHub, monorepo scaffold, docker-compose Postgres, Flyway, Testcontainers, Tailwind, docs and skills | 🔵 in review | [#1](https://github.com/hdang-dev/kido-test-app/pull/1) |
+| 1 | Security core | `V1` and `V2` migrations, `AppUser`, `UserDetailsService`, `SecurityConfig` (session, CSRF, 401/403 JSON, role hierarchy), Spring Session JDBC, `SuperAdminSeeder`, `GlobalExceptionHandler` | ⬜ | |
 | 2 | Sign up / Login / Logout | Signup, login (remember me), logout, and `/api/me` on BE and FE; `SignupPage`, `LoginPage`, auth context, guards | ⬜ | |
 | 3 | Profile | Edit username and bio, change password (expires other sessions), BE and FE tests | ⬜ | |
 | 4 | User management | Paginated list, grant and revoke admin per §5, session expiry on role change, RBAC tests | ⬜ | |

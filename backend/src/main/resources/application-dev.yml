@@ -1,0 +1,12 @@
+# Local development only — activated by `mvn spring-boot:run` (see pom.xml). Values match docker-compose.yml.
+# These are public, demo-only credentials. Never activate this profile outside a developer machine.
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/testapp}
+    username: ${DB_USERNAME:testapp}
+    password: ${DB_PASSWORD:testapp}
+
+app:
+  super-admin:
+    email: ${APP_SUPER_ADMIN_EMAIL:superadmin@kido.local}
+    password: ${APP_SUPER_ADMIN_PASSWORD:SuperAdmin@123}

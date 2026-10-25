@@ -1,17 +1,17 @@
 spring:
   application:
     name: testapp
+  # No fallbacks here: outside the dev profile, missing env vars fail startup instead of using public defaults.
   datasource:
-    url: jdbc:h2:mem:authdb;DB_CLOSE_DELAY=-1
-    username: sa
-    password:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: validate  # Flyway owns the schema (design.md D6)
     open-in-view: false
-  h2:
-    console:
-      enabled: false
+  flyway:
+    locations: classpath:db/migration
 
 server:
   port: 8080
@@ -23,8 +23,8 @@ server:
         http-only: true
         same-site: lax
 
-# Seeded on startup by config/ (demo only — override via env vars in any real setup)
+# Seeded on startup if no SUPER_ADMIN exists (design.md §5)
 app:
-  admin:
-    username: ${APP_ADMIN_USERNAME:admin}
-    password: ${APP_ADMIN_PASSWORD:Admin@123}
+  super-admin:
+    email: ${APP_SUPER_ADMIN_EMAIL}
+    password: ${APP_SUPER_ADMIN_PASSWORD}

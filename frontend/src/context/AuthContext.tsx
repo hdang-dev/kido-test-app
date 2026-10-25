@@ -1,24 +1,25 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError } from '../api/client';
-import type { CurrentUser } from '../api/types';
+import type { MeResponse } from '../api/types';
 
 interface AuthState {
-  user: CurrentUser | null;
+  user: MeResponse | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe: boolean) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  setUser: (user: MeResponse | null) => void;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [user, setUser] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
-      setUser(await api<CurrentUser>('/auth/me'));
+      setUser(await api<MeResponse>('/me'));
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) setUser(null);
       else throw e;
@@ -31,8 +32,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
-  const login = async (username: string, password: string) => {
-    setUser(await api<CurrentUser>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }));
+  const login = async (email: string, password: string, rememberMe: boolean) => {
+    setUser(
+      await api<MeResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password, rememberMe }) }),
+    );
   };
 
   const logout = async () => {
@@ -40,7 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  return <AuthContext.Provider value={{ user, loading, login, logout, refresh }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, loading, login, logout, refresh, setUser }}>{children}</AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthState {

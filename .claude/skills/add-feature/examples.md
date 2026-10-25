@@ -13,7 +13,7 @@ import jakarta.validation.constraints.Size;
 
 public record ChangePasswordRequest(
         @NotBlank String currentPassword,
-        @NotBlank @Size(min = 8, max = 100)
+        @NotBlank @Size(min = 8, max = 72) // BCrypt ignores bytes past 72 (design.md §8)
         @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*\\d).+$", message = "must contain a letter and a digit")
         String newPassword,
         @NotBlank String confirmPassword) {
@@ -34,14 +34,18 @@ public class UserService {
     }
 
     @Transactional
-    public void changePassword(String username, ChangePasswordRequest request) {
-        AppUser user = repository.findByUsername(username)
+    // email = principal name = identity; username is a non-unique display name (design.md D5)
+    public void changePassword(String email, ChangePasswordRequest request) {
+        AppUser user = repository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("Authenticated user not found"));
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
             throw new InvalidPasswordException("currentPassword", "Current password is incorrect");
         }
         if (!request.newPassword().equals(request.confirmPassword())) {
             throw new InvalidPasswordException("confirmPassword", "Passwords do not match");
+        }
+        if (passwordEncoder.matches(request.newPassword(), user.getPasswordHash())) {
+            throw new InvalidPasswordException("newPassword", "New password must differ from the current one");
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
     }
@@ -73,6 +77,7 @@ public class MeController {
 ```java
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(TestcontainersConfiguration.class) // always: tests must never hit the dev database (design.md D7)
 class MeControllerTest {
 
     @Autowired MockMvc mvc;
@@ -108,13 +113,13 @@ export const changePassword = (body: ChangePasswordRequest) =>
   api<void>('/me/password', { method: 'PUT', body: JSON.stringify(body) });
 ```
 
-## Frontend: Page (`src/pages/ChangePasswordPage.tsx`)
+## Frontend: Component (`src/components/ChangePasswordForm.tsx`, rendered inside `ProfilePage`)
 ```tsx
 import { useState, type FormEvent } from 'react';
 import { ApiError } from '../api/client';
 import { changePassword } from '../api/me';
 
-export function ChangePasswordPage() {
+export function ChangePasswordForm() {
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
@@ -133,43 +138,48 @@ export function ChangePasswordPage() {
   };
 
   const field = (name: keyof typeof form, label: string) => (
-    <label>
-      {label}
-      <input type="password" value={form[name]} onChange={(e) => setForm({ ...form, [name]: e.target.value })} />
-      {errors[name] && <span role="alert">{errors[name]}</span>}
+    <label className="block space-y-1">
+      <span className="text-sm font-medium">{label}</span>
+      <input
+        type="password"
+        className="w-full rounded border px-3 py-2"
+        value={form[name]}
+        onChange={(e) => setForm({ ...form, [name]: e.target.value })}
+      />
+      {errors[name] && <span role="alert" className="text-sm text-red-600">{errors[name]}</span>}
     </label>
   );
 
   return (
-    <form onSubmit={onSubmit}>
-      <h1>Change password</h1>
+    <form onSubmit={onSubmit} className="space-y-4">
+      <h2 className="text-lg font-semibold">Change password</h2>
       {field('currentPassword', 'Current password')}
       {field('newPassword', 'New password')}
       {field('confirmPassword', 'Confirm new password')}
-      {errors._ && <p role="alert">{errors._}</p>}
-      {message && <p role="status">{message}</p>}
-      <button type="submit">Save</button>
+      {errors._ && <p role="alert" className="text-red-600">{errors._}</p>}
+      {message && <p role="status" className="text-green-700">{message}</p>}
+      <button type="submit" className="rounded bg-blue-600 px-4 py-2 text-white">Save</button>
     </form>
   );
 }
 ```
 
-## Frontend: Test (`src/pages/ChangePasswordPage.test.tsx`)
+## Frontend: Test (`src/components/ChangePasswordForm.test.tsx`)
 ```tsx
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { ApiError } from '../api/client';
-import * as profileApi from '../api/me';
-import { ChangePasswordPage } from './ChangePasswordPage';
+import * as meApi from '../api/me';
+import { ChangePasswordForm } from './ChangePasswordForm';
 
 vi.mock('../api/me');
 
 it('shows the field error returned by the API', async () => {
-  vi.mocked(profileApi.changePassword).mockRejectedValue(
+  vi.mocked(meApi.changePassword).mockRejectedValue(
     new ApiError(400, 'Validation failed', { currentPassword: 'Current password is incorrect' }),
   );
-  render(<ChangePasswordPage />);
+  render(<ChangePasswordForm />);
   await userEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByText('Current password is incorrect')).toBeInTheDocument();
 });
