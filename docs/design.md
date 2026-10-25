@@ -142,7 +142,7 @@ Validation runs on both sides: on the frontend for UX, and on the backend as the
 ## 12. Phases
 | # | Phase | Scope | Status | PR |
 |---|-------|-------|--------|----|
-| 0 | Foundation | git and GitHub, monorepo scaffold, docker-compose Postgres, Flyway, Tailwind, docs and skills | 🟡 in progress | |
+| 0 | Foundation | git and GitHub, monorepo scaffold, docker-compose Postgres, Flyway, Testcontainers, Tailwind, docs and skills | ✅ done | [#1](https://github.com/hdang-dev/kido-test-app/pull/1) |
 | 1 | Security core | `V1` and `V2` migrations, `AppUser`, `UserDetailsService`, `SecurityConfig` (session, CSRF, 401/403 JSON, role hierarchy), Spring Session JDBC, `SuperAdminSeeder`, `GlobalExceptionHandler`, Testcontainers base test | ⬜ | |
 | 2 | Sign up / Login / Logout | Signup, login (remember me), logout, and `/api/me` on BE and FE; `SignupPage`, `LoginPage`, auth context, guards | ⬜ | |
 | 3 | Profile | Edit username and bio, change password (expires other sessions), BE and FE tests | ⬜ | |
