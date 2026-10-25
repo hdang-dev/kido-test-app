@@ -1,21 +1,18 @@
 package com.kido.testapp.common;
 
 import java.nio.charset.StandardCharsets;
-import java.util.regex.Pattern;
 
 /**
- * Single source of the password rule (design.md §8): 8–72 chars, at least one letter and one digit.
- * 72 is BCrypt's limit — it silently ignores bytes beyond it, so the byte length is checked too.
- * Request DTOs use {@link #REGEX}/{@link #MIN}/{@link #MAX} in Bean Validation; other code calls {@link #violation}.
+ * Single source of the password rule (design.md §8): at least 8 characters, at most 72 UTF-8 bytes
+ * (BCrypt's hard limit — Spring's encoder throws beyond it), at least one letter and one digit.
+ * Request DTOs use {@link ValidPassword}, which delegates here; never re-express the rule with @Size/@Pattern
+ * (@Size counts UTF-16 chars, not bytes).
  */
 public final class PasswordPolicy {
 
-    public static final int MIN = 8;
-    public static final int MAX = 72;
-    public static final String REGEX = "^(?=.*\\p{L})(?=.*\\d).+$";
+    public static final int MIN_CHARS = 8;
+    public static final int MAX_BYTES = 72;
     public static final String MESSAGE = "must be 8-72 characters with at least one letter and one digit";
-
-    private static final Pattern PATTERN = Pattern.compile(REGEX);
 
     private PasswordPolicy() {
     }
@@ -23,9 +20,10 @@ public final class PasswordPolicy {
     /** @return null if the password is acceptable, otherwise a message (never containing the password). */
     public static String violation(String password) {
         if (password == null
-                || password.length() < MIN
-                || password.getBytes(StandardCharsets.UTF_8).length > MAX
-                || !PATTERN.matcher(password).matches()) {
+                || password.codePointCount(0, password.length()) < MIN_CHARS
+                || password.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES
+                || password.codePoints().noneMatch(Character::isLetter)
+                || password.codePoints().noneMatch(Character::isDigit)) {
             return MESSAGE;
         }
         return null;
