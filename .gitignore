@@ -1,0 +1,14 @@
+target/
+*.class
+*.log
+.idea/
+*.iml
+.vscode/
+.DS_Store
+*.mv.db
+*.trace.db
+.claude/settings.local.json
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
