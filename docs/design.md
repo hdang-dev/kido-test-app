@@ -75,13 +75,14 @@ Recovery after losing the super admin password requires manual DB access (an acc
 1. The user enters email, password, confirm password, and optionally username and bio.
 2. The frontend validates the format, then calls `POST /api/auth/signup`.
 3. The backend validates again, normalises the email, rejects a duplicate with `409` (a race is caught by the DB unique constraint), sets username to the email local part if blank, hashes the password, and saves with role `USER`.
-4. The backend **logs the user in automatically** (new session) and returns `201 MeResponse`. The frontend navigates to `/`.
+4. The backend **logs the user in automatically** (`SessionLogin`: new session, CSRF token rotated) and returns `201 MeResponse`. The frontend stores the user, and `GuestRoute` redirects to `/`.
 
 **Login**: `/login`
 1. The user enters email, password, and an optional "Remember me".
 2. `POST /api/auth/login` → `AuthenticationManager` → `200 MeResponse`. Because login is a controller, not a filter, **`AuthController` must do explicitly** what `formLogin` would do: run the `SessionAuthenticationStrategy` (rotates the session ID against fixation, and rotates the CSRF token), then save the `SecurityContext` through `SecurityContextRepository`. Phase 2 tests must assert that the session ID changes.
 3. A failure always returns `401` with "Invalid email or password". It never reveals which part was wrong.
-4. **Session lifetime:** the idle timeout is 30 min. With "Remember me", the session cookie persists for 30 days (Spring Session remember-me). Without it, the cookie ends when the browser closes.
+4. **Session lifetime:** without "Remember me", the cookie ends when the browser closes and the server session expires after **30 min idle**. With it, Spring Session makes the cookie persistent and the **server** session lives for **30 days idle**. The server is the authority on expiry: cookie `Max-Age` is effectively unlimited, and the session's `maxInactiveInterval` decides.
+5. **Expired session in the SPA:** any non-`/auth/*` call that returns 401 clears the user in `AuthContext`, so the guards redirect to `/login`.
 
 **Profile**: `/` (the home page after login)
 - Shows email (read-only), username, and bio. They can be edited inline → `PUT /api/me`.
@@ -145,8 +146,8 @@ Validation runs on both sides: on the frontend for UX, and on the backend as the
 | # | Phase | Scope | Status | PR |
 |---|-------|-------|--------|----|
 | 0 | Foundation | git and GitHub, monorepo scaffold, docker-compose Postgres, Flyway, Testcontainers, Tailwind, docs and skills | ✅ done | [#1](https://github.com/hdang-dev/kido-test-app/pull/1) |
-| 1 | Security core | `V1` and `V2` migrations, `AppUser`, `UserDetailsService`, `SecurityConfig` (session, CSRF, 401/403 JSON, role hierarchy), Spring Session JDBC, `SuperAdminSeeder`, `GlobalExceptionHandler` | 🔵 in review | [#2](https://github.com/hdang-dev/kido-test-app/pull/2) |
-| 2 | Sign up / Login / Logout | Signup, login (remember me), logout, and `/api/me` on BE and FE; `SignupPage`, `LoginPage`, auth context, guards. Login must rotate the session ID and CSRF token and persist the context (§6) | ⬜ | |
+| 1 | Security core | `V1` and `V2` migrations, `AppUser`, `UserDetailsService`, `SecurityConfig` (session, CSRF, 401/403 JSON, role hierarchy), Spring Session JDBC, `SuperAdminSeeder`, `GlobalExceptionHandler` | ✅ done | [#2](https://github.com/hdang-dev/kido-test-app/pull/2) |
+| 2 | Sign up / Login / Logout | Signup, login (remember me), logout, and `/api/me` on BE and FE; `SignupPage`, `LoginPage`, auth context, guards. Login must rotate the session ID and CSRF token and persist the context (§6) | 🔵 in review | [#3](https://github.com/hdang-dev/kido-test-app/pull/3) |
 | 3 | Profile | Edit username and bio, change password (expires other sessions), BE and FE tests | ⬜ | |
 | 4 | User management | Paginated list, grant and revoke admin per §5, session expiry on role change, RBAC tests | ⬜ | |
 | 5 | Hardening and wrap-up | `security-review` skill pass and fixes, README, demo script | ⬜ | |

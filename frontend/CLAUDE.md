@@ -9,4 +9,6 @@ React 18 · TypeScript (strict) · Vite · React Router 6 · Vitest + Testing Li
 - Each page is one file in `src/pages/`, and reusable pieces go in `src/components/`. Use named exports.
 - Style with Tailwind utility classes only. There is no component library and no custom CSS beyond `src/index.css`. Keep it clean and minimal.
 - Forms use controlled inputs and show `fieldErrors` next to each field.
-- Tests sit next to the component as `*.test.tsx`. Mock `useAuth` or `api` rather than the network.
+- Tests sit next to the component as `*.test.tsx`. Mock `useAuth` (with `authState()` from `src/test-utils.tsx`) or the `src/api/*` module rather than the network, and render with `renderWithRouter`.
+- Vitest gotcha: write `beforeEach(() => { mock.mockReset(); })` **with braces**. A function returned from a hook runs as teardown, and `mockReset()` returns the mock, which then gets called.
+- Client-side validation (`src/validation.ts`) mirrors backend rules for fast feedback only. Keep it in sync with `PasswordPolicy` and the DTO limits.
