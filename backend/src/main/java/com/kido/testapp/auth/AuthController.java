@@ -33,7 +33,7 @@ public class AuthController {
                              HttpServletRequest request, HttpServletResponse response) {
         AppUser user = userService.register(body.email(), body.password(), body.confirmPassword(),
                 body.username(), body.bio());
-        sessionLogin.withoutPassword(user.getEmail(), request, response);
+        sessionLogin.withoutPassword(user, request, response);
         return MeResponse.from(user);
     }
 

@@ -20,7 +20,12 @@ public class AppUserDetailsService implements UserDetailsService {
     public UserDetails loadUserByUsername(String email) {
         AppUser user = repository.findByEmail(Emails.normalise(email))
                 .orElseThrow(() -> new UsernameNotFoundException("User not found")); // generic: no email echo
-        return User.withUsername(user.getEmail())
+        return toUserDetails(user);
+    }
+
+    /** The principal stored in the session. Callers that skip authentication must erase credentials. */
+    public static User toUserDetails(AppUser user) {
+        return (User) User.withUsername(user.getEmail())
                 .password(user.getPasswordHash())
                 .roles(user.getRole().name())
                 .build();

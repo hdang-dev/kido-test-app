@@ -21,6 +21,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.session.Session;
 import org.springframework.session.SessionRepository;
 import org.springframework.test.web.servlet.MockMvc;
@@ -183,6 +186,33 @@ class AuthControllerTest {
         assertThat(browserSession.getMaxAge()).as("ends with the browser").isEqualTo(-1);
         assertThat(serverSession(remembered).getMaxInactiveInterval()).isEqualTo(Duration.ofDays(30));
         assertThat(serverSession(browserSession).getMaxInactiveInterval()).isEqualTo(Duration.ofMinutes(30));
+    }
+
+    @Test
+    void reLoginWithoutRememberMeDropsAnEarlierRememberedLifetime() throws Exception {
+        String email = uniqueEmail();
+        signup(email, null, null);
+        Cookie remembered = login(email, PASSWORD, true).getCookie("SESSION");
+
+        Cookie relogged = login(email, PASSWORD, false, remembered).getCookie("SESSION");
+
+        assertThat(serverSession(relogged).getMaxInactiveInterval()).isEqualTo(Duration.ofMinutes(30));
+        assertThat(relogged.getMaxAge()).isEqualTo(-1);
+    }
+
+    @Test
+    void sessionsStoredInTheDatabaseNeverContainThePasswordHash() throws Exception {
+        String email = uniqueEmail();
+        Cookie afterSignup = signup(email, null, null).andReturn().getResponse().getCookie("SESSION");
+        Cookie afterLogin = login(email, PASSWORD, false).getCookie("SESSION");
+
+        for (Cookie cookie : new Cookie[] {afterSignup, afterLogin}) {
+            SecurityContext context = serverSession(cookie)
+                    .getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+            var principal = (UserDetails) context.getAuthentication().getPrincipal();
+            assertThat(principal.getUsername()).isEqualTo(email);
+            assertThat(principal.getPassword()).as("hash erased before the session is persisted").isNull();
+        }
     }
 
     private Session serverSession(Cookie cookie) {

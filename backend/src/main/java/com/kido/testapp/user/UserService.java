@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Service
 public class UserService {
@@ -33,9 +34,9 @@ public class UserService {
         if (repository.existsByEmail(normalisedEmail)) {
             throw ApiException.field(HttpStatus.CONFLICT, "email", EMAIL_TAKEN);
         }
-        String displayName = isBlank(username) ? Emails.defaultUsername(normalisedEmail) : username.strip();
+        String displayName = StringUtils.hasText(username) ? username.strip() : Emails.defaultUsername(normalisedEmail);
         var user = new AppUser(normalisedEmail, passwordEncoder.encode(password), displayName,
-                isBlank(bio) ? null : bio.strip(), Role.USER);
+                StringUtils.hasText(bio) ? bio.strip() : null, Role.USER);
         try {
             return repository.saveAndFlush(user); // flush now so a concurrent duplicate surfaces here, not at commit
         } catch (DataIntegrityViolationException race) {
@@ -48,9 +49,5 @@ public class UserService {
     public AppUser getByEmail(String email) {
         return repository.findByEmail(Emails.normalise(email))
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Authentication required"));
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
     }
 }
