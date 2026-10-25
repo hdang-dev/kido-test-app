@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: testapp
       POSTGRES_PASSWORD: testapp
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"  # localhost only: credentials are public
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

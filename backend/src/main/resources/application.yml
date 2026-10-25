@@ -1,11 +1,11 @@
 spring:
   application:
     name: testapp
-  # Defaults match docker-compose.yml (dev only). Override via env vars elsewhere.
+  # No fallbacks here: outside the dev profile, missing env vars fail startup instead of using public defaults.
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/testapp}
-    username: ${DB_USERNAME:testapp}
-    password: ${DB_PASSWORD:testapp}
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate  # Flyway owns the schema (design.md D6)
@@ -23,8 +23,8 @@ server:
         http-only: true
         same-site: lax
 
-# Seeded on startup if no SUPER_ADMIN exists (design.md §5). Demo defaults only — override via env vars.
+# Seeded on startup if no SUPER_ADMIN exists (design.md §5)
 app:
   super-admin:
-    email: ${APP_SUPER_ADMIN_EMAIL:superadmin@kido.local}
-    password: ${APP_SUPER_ADMIN_PASSWORD:SuperAdmin@123}
+    email: ${APP_SUPER_ADMIN_EMAIL}
+    password: ${APP_SUPER_ADMIN_PASSWORD}
