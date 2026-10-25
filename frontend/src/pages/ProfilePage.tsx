@@ -1,5 +1,17 @@
-// TODO (phase 3): show email / username / bio, edit username + bio (PUT /api/me),
-// change password section (PUT /api/me/password)
+import { ChangePasswordForm } from '../components/ChangePasswordForm';
+import { ProfileDetails } from '../components/ProfileDetails';
+import { useAuth } from '../context/AuthContext';
+
+// Home page after login (design.md §9): account details + change password.
 export function ProfilePage() {
-  return <h1 className="text-2xl font-semibold">Profile</h1>;
+  const { user } = useAuth();
+  if (!user) return null; // ProtectedRoute guarantees a user; keeps the types honest
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-semibold">Hi, {user.username}</h1>
+      <ProfileDetails user={user} />
+      <ChangePasswordForm />
+    </div>
+  );
 }
