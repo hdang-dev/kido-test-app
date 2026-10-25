@@ -138,7 +138,7 @@ Validation runs on both sides: on the frontend for UX, and on the backend as the
 - Commits are small conventional commits: `feat(auth): …`, `test(user): …`, `docs: …`, `chore: …`.
 - **Docs ship with the code.** Every PR updates this file (status, API, and decisions where relevant), plus `CLAUDE.md`, the README, or the skills if they are affected.
 - Before merging, `mvn test`, `npm test`, and `npm run build` must all be green, and the `security-review` skill must have been run on the diff.
-- **Review happens per phase, in the PR.** The project owner reviews the whole phase and leaves comments. Each comment is addressed with a new commit on the same branch, and pushed history is never rewritten. **Only the owner merges.** Nothing is pushed directly to `main`.
+- **Review happens per phase, in the PR.** The project owner reviews the whole phase and leaves comments. Each comment is addressed with a new commit on the same branch, and pushed history is never rewritten. **Merging needs the owner's approval (LGTM)** and is always a **squash merge**: each phase lands on `main` as one commit (`<type>: phase N — <name> (#PR)`), while the PR keeps the detailed commits. Nothing is pushed directly to `main`.
 - **Phase status:** a phase's own PR marks it 🔵 *in review*. The next phase's PR flips it to ✅ *done* once it has been merged, because nobody pushes to `main` just to update a status.
 
 ## 12. Phases
