@@ -8,7 +8,7 @@ export function ProfilePage() {
   if (!user) return null; // ProtectedRoute guarantees a user; keeps the types honest
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <h1 className="text-2xl font-semibold">Hi, {user.username}</h1>
       <ProfileDetails user={user} />
       <ChangePasswordForm />

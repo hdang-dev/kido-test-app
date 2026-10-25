@@ -10,7 +10,7 @@ const ROLE_LABEL: Record<Role, string> = { USER: 'User', ADMIN: 'Admin', SUPER_A
 
 export function RoleBadge({ role }: { role: Role }) {
   const colour = role === 'USER' ? 'bg-slate-100 text-slate-700' : 'bg-amber-100 text-amber-800';
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colour}`}>{ROLE_LABEL[role]}</span>;
+  return <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${colour}`}>{ROLE_LABEL[role]}</span>;
 }
 
 // Email (read-only), username and bio, with an inline edit mode (design.md §6 "Profile").

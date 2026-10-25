@@ -23,8 +23,8 @@ export function AppLayout() {
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
-        <nav className="mx-auto flex max-w-3xl items-center gap-2 px-6 py-3">
-          <span className="mr-4 font-semibold text-slate-900">Kido Auth</span>
+        <nav className="mx-auto flex max-w-5xl items-center gap-2 px-4 py-3 sm:px-6">
+          <span className="mr-2 font-semibold text-slate-900 sm:mr-4">Kido Auth</span>
           <NavLink to="/" end className={linkClass}>
             Profile
           </NavLink>
@@ -41,11 +41,11 @@ export function AppLayout() {
         </nav>
       </header>
       {logoutError && (
-        <p role="alert" className="mx-auto mt-4 max-w-3xl rounded-md bg-red-50 px-6 py-2 text-sm text-red-700">
+        <p role="alert" className="mx-auto mt-4 max-w-5xl rounded-md bg-red-50 px-6 py-2 text-sm text-red-700">
           {logoutError}
         </p>
       )}
-      <main className="mx-auto max-w-3xl p-6">
+      <main className="mx-auto max-w-5xl p-4 sm:p-6">
         <Outlet />
       </main>
     </div>
