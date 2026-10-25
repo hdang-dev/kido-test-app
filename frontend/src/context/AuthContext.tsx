@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { api, ApiError } from '../api/client';
+import * as authApi from '../api/auth';
+import { ApiError, setUnauthorizedHandler } from '../api/client';
 import type { MeResponse } from '../api/types';
 
 interface AuthState {
@@ -17,9 +18,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // The initial GET also makes the backend issue the XSRF-TOKEN cookie needed for the first POST.
   const refresh = useCallback(async () => {
     try {
-      setUser(await api<MeResponse>('/me'));
+      setUser(await authApi.fetchMe());
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) setUser(null);
       else throw e;
@@ -29,18 +31,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    setUnauthorizedHandler(() => setUser(null)); // expired session → guards redirect to /login
     void refresh();
+    return () => setUnauthorizedHandler(null);
   }, [refresh]);
 
   const login = async (email: string, password: string, rememberMe: boolean) => {
-    setUser(
-      await api<MeResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password, rememberMe }) }),
-    );
+    setUser(await authApi.login({ email, password, rememberMe }));
   };
 
   const logout = async () => {
-    await api<void>('/auth/logout', { method: 'POST' });
-    setUser(null);
+    try {
+      await authApi.logout();
+    } finally {
+      setUser(null);
+    }
   };
 
   return (
