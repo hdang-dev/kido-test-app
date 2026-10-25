@@ -44,6 +44,34 @@ public class UserService {
         }
     }
 
+    /** Profile edit (design.md §6): only username and bio; email and role are not editable here. */
+    @Transactional
+    public AppUser updateProfile(String email, String username, String bio) {
+        AppUser user = getByEmail(email);
+        user.setUsername(StringUtils.hasText(username) ? username.strip() : Emails.defaultUsername(user.getEmail()));
+        user.setBio(StringUtils.hasText(bio) ? bio.strip() : null);
+        return user; // dirty checking writes it on commit
+    }
+
+    /**
+     * Self-service password change (design.md §6). Requires the current password; the caller is
+     * responsible for revoking other sessions afterwards (see MeController).
+     */
+    @Transactional
+    public void changePassword(String email, String currentPassword, String newPassword, String confirmPassword) {
+        AppUser user = getByEmail(email);
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw ApiException.field(HttpStatus.BAD_REQUEST, "currentPassword", "Current password is incorrect");
+        }
+        if (!newPassword.equals(confirmPassword)) {
+            throw ApiException.field(HttpStatus.BAD_REQUEST, "confirmPassword", "Passwords do not match");
+        }
+        if (newPassword.equals(currentPassword)) {
+            throw ApiException.field(HttpStatus.BAD_REQUEST, "newPassword", "New password must differ from the current one");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+    }
+
     /** For the signed-in principal. A missing row means the account vanished mid-session → treat as logged out. */
     @Transactional(readOnly = true)
     public AppUser getByEmail(String email) {
