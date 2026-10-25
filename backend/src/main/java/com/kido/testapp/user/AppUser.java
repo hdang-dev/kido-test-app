@@ -23,7 +23,7 @@ public class AppUser {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, unique = true, length = 254)
+    @Column(nullable = false, length = 254) // unique on lower(email): V1 uq_app_user_email_ci
     private String email;
 
     @Column(name = "password_hash", nullable = false, length = 100)

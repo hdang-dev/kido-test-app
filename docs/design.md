@@ -40,7 +40,7 @@ Browser ──► Vite dev server :5173 ──/api proxy──► Spring Boot :8
 | Column          | Type | Notes |
 |-----------------|------|-------|
 | `id`            | `uuid` PK, default `gen_random_uuid()` | Random (v4). Entity: `@GeneratedValue(strategy = GenerationType.UUID)` |
-| `email`         | `varchar(254)` not null | Stored lower-cased and trimmed. `UNIQUE` |
+| `email`         | `varchar(254)` not null | Stored lower-cased and trimmed by the app. Unique on `lower(email)`, so case-insensitive uniqueness is enforced by the DB itself |
 | `password_hash` | `varchar(100)` not null | BCrypt |
 | `username`      | `varchar(50)` not null | Display name, **not unique**. Defaults to the part of the email before the @ |
 | `bio`           | `varchar(500)` null | |
@@ -79,7 +79,7 @@ Recovery after losing the super admin password requires manual DB access (an acc
 
 **Login**: `/login`
 1. The user enters email, password, and an optional "Remember me".
-2. `POST /api/auth/login` → `AuthenticationManager` → the session ID is rotated → `200 MeResponse`.
+2. `POST /api/auth/login` → `AuthenticationManager` → `200 MeResponse`. Because login is a controller, not a filter, **`AuthController` must do explicitly** what `formLogin` would do: run the `SessionAuthenticationStrategy` (rotates the session ID against fixation, and rotates the CSRF token), then save the `SecurityContext` through `SecurityContextRepository`. Phase 2 tests must assert that the session ID changes.
 3. A failure always returns `401` with "Invalid email or password". It never reveals which part was wrong.
 4. **Session lifetime:** the idle timeout is 30 min. With "Remember me", the session cookie persists for 30 days (Spring Session remember-me). Without it, the cookie ends when the browser closes.
 
@@ -114,7 +114,7 @@ All endpoints sit under `/api` and use JSON. Errors are returned as `ErrorRespon
 | Field | Rule |
 |-------|------|
 | email | Required, valid format, max 254 characters, unique (case-insensitive) |
-| password | 8–72 characters (BCrypt ignores everything past 72 bytes), at least one letter and one digit. Must equal `confirmPassword` |
+| password | At least 8 characters and at most **72 UTF-8 bytes** (BCrypt's hard limit; Vietnamese letters take 2–3 bytes each), with at least one letter and one digit. Must equal `confirmPassword`. Enforced by `@ValidPassword` → `PasswordPolicy` |
 | username | Optional at sign-up (blank → email local part), max 50 characters, trimmed |
 | bio | Optional, max 500 characters |
 
@@ -146,7 +146,7 @@ Validation runs on both sides: on the frontend for UX, and on the backend as the
 |---|-------|-------|--------|----|
 | 0 | Foundation | git and GitHub, monorepo scaffold, docker-compose Postgres, Flyway, Testcontainers, Tailwind, docs and skills | ✅ done | [#1](https://github.com/hdang-dev/kido-test-app/pull/1) |
 | 1 | Security core | `V1` and `V2` migrations, `AppUser`, `UserDetailsService`, `SecurityConfig` (session, CSRF, 401/403 JSON, role hierarchy), Spring Session JDBC, `SuperAdminSeeder`, `GlobalExceptionHandler` | 🔵 in review | [#2](https://github.com/hdang-dev/kido-test-app/pull/2) |
-| 2 | Sign up / Login / Logout | Signup, login (remember me), logout, and `/api/me` on BE and FE; `SignupPage`, `LoginPage`, auth context, guards | ⬜ | |
+| 2 | Sign up / Login / Logout | Signup, login (remember me), logout, and `/api/me` on BE and FE; `SignupPage`, `LoginPage`, auth context, guards. Login must rotate the session ID and CSRF token and persist the context (§6) | ⬜ | |
 | 3 | Profile | Edit username and bio, change password (expires other sessions), BE and FE tests | ⬜ | |
 | 4 | User management | Paginated list, grant and revoke admin per §5, session expiry on role change, RBAC tests | ⬜ | |
 | 5 | Hardening and wrap-up | `security-review` skill pass and fixes, README, demo script | ⬜ | |

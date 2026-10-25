@@ -9,11 +9,12 @@ CREATE TABLE app_user (
     created_at    timestamptz  NOT NULL DEFAULT now(),
     updated_at    timestamptz  NOT NULL DEFAULT now(),
 
-    CONSTRAINT uq_app_user_email UNIQUE (email),
-    -- The app normalises emails; the DB guarantees it so uniqueness is effectively case-insensitive.
-    CONSTRAINT ck_app_user_email_normalised CHECK (email = lower(btrim(email))),
     CONSTRAINT ck_app_user_role CHECK (role IN ('USER', 'ADMIN', 'SUPER_ADMIN'))
 );
+
+-- Case-insensitive uniqueness enforced by the DB itself. The app also stores emails normalised
+-- (Emails.normalise), but uniqueness doesn't depend on Java and Postgres agreeing on lower-casing.
+CREATE UNIQUE INDEX uq_app_user_email_ci ON app_user (lower(email));
 
 -- At most one SUPER_ADMIN, ever (design.md §5).
 CREATE UNIQUE INDEX uq_app_user_single_super_admin ON app_user (role) WHERE role = 'SUPER_ADMIN';

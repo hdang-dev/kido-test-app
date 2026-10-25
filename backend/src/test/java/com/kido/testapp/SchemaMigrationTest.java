@@ -42,14 +42,9 @@ class SchemaMigrationTest {
 
     // One failing statement per test: Postgres aborts the transaction after the first error.
     @Test
-    void rejectsUpperCaseEmail() {
-        assertThatThrownBy(() -> insertUser("Mixed@Test.local", "USER"))
-                .isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    void rejectsPaddedEmail() {
-        assertThatThrownBy(() -> insertUser(" padded@test.local", "USER"))
+    void rejectsDuplicateEmailThatDiffersOnlyInCase() {
+        insertUser("case@test.local", "USER");
+        assertThatThrownBy(() -> insertUser("Case@Test.LOCAL", "USER"))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 

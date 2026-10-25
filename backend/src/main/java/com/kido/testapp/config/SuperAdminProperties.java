@@ -2,6 +2,7 @@ package com.kido.testapp.config;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -12,7 +13,7 @@ import org.springframework.validation.annotation.Validated;
  */
 @Validated
 @ConfigurationProperties("app.super-admin")
-public record SuperAdminProperties(@NotBlank @Email String email, @NotBlank String password) {
+public record SuperAdminProperties(@NotBlank @Email @Size(max = 254) String email, @NotBlank String password) {
 
     @Override
     public String toString() {
