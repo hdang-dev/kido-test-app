@@ -17,8 +17,9 @@ function validate(form: Form): Record<string, string> {
   const password = passwordError(form.password);
   if (password) errors.password = password;
   if (form.confirmPassword !== form.password) errors.confirmPassword = 'Passwords do not match';
-  if (form.username.length > 50) errors.username = 'Username must be at most 50 characters';
-  if (form.bio.length > 500) errors.bio = 'Bio must be at most 500 characters';
+  // Lengths of what is actually sent (trimmed), as the backend sees it
+  if (form.username.trim().length > 50) errors.username = 'Username must be at most 50 characters';
+  if (form.bio.trim().length > 500) errors.bio = 'Bio must be at most 500 characters';
   return errors;
 }
 
@@ -31,7 +32,9 @@ export function SignupPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const set = (field: keyof Form) => (value: string) => setForm((f) => ({ ...f, [field]: value }));
-  const localPart = form.email.includes('@') ? form.email.slice(0, form.email.lastIndexOf('@')) : '';
+  // Preview the backend default (Emails.defaultUsername on the normalised email)
+  const normalisedEmail = form.email.trim().toLowerCase();
+  const localPart = normalisedEmail.includes('@') ? normalisedEmail.slice(0, normalisedEmail.lastIndexOf('@')) : '';
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();

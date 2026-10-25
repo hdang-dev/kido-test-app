@@ -19,12 +19,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   // The initial GET also makes the backend issue the XSRF-TOKEN cookie needed for the first POST.
+  // Only a 401 means "not logged in"; on other failures (server down, 5xx) keep what we know.
   const refresh = useCallback(async () => {
     try {
       setUser(await authApi.fetchMe());
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) setUser(null);
-      else throw e;
+      else console.error('Could not load the current session', e);
     } finally {
       setLoading(false);
     }
@@ -40,11 +41,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(await authApi.login({ email, password, rememberMe }));
   };
 
+  // Never pretend to be logged out while the server session is alive (shared machines): on failure,
+  // re-check the session (a 401 clears the user) and let the caller show the error.
   const logout = async () => {
     try {
       await authApi.logout();
-    } finally {
       setUser(null);
+    } catch (e) {
+      await refresh();
+      throw e;
     }
   };
 

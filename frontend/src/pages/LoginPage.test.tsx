@@ -36,6 +36,17 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText('Password')).toHaveValue('');
   });
 
+  it('asks for both fields instead of calling the API with blanks', async () => {
+    const state = authState();
+    vi.mocked(useAuth).mockReturnValue(state);
+    renderWithRouter(<LoginPage />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter your email and password');
+    expect(state.login).not.toHaveBeenCalled();
+  });
+
   it('links to sign-up', () => {
     vi.mocked(useAuth).mockReturnValue(authState());
     renderWithRouter(<LoginPage />);

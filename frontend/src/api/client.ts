@@ -24,6 +24,16 @@ function readCookie(name: string): string | undefined {
     ?.split('=')[1];
 }
 
+// The backend issues XSRF-TOKEN on any response, but logout deletes it and nothing else may have
+// been requested since — so fetch one first instead of sending a doomed, token-less POST.
+async function csrfToken(): Promise<string | undefined> {
+  if (!readCookie('XSRF-TOKEN')) {
+    await fetch('/api/me', { credentials: 'include' }).catch(() => undefined);
+  }
+  const token = readCookie('XSRF-TOKEN');
+  return token ? decodeURIComponent(token) : undefined;
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const method = (options.method ?? 'GET').toUpperCase();
   const headers = new Headers(options.headers);
@@ -31,8 +41,8 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     headers.set('Content-Type', 'application/json');
   }
   if (method !== 'GET' && method !== 'HEAD') {
-    const token = readCookie('XSRF-TOKEN');
-    if (token) headers.set('X-XSRF-TOKEN', decodeURIComponent(token));
+    const token = await csrfToken();
+    if (token) headers.set('X-XSRF-TOKEN', token);
   }
 
   const res = await fetch(`/api${path}`, { ...options, method, headers, credentials: 'include' });

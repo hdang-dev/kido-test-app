@@ -16,13 +16,17 @@ export function LoginPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!email.trim() || !password) {
+      setError('Enter your email and password');
+      return;
+    }
     setError('');
     setSubmitting(true);
     try {
       await login(email, password, rememberMe);
     } catch (err) {
-      setPassword('');
-      setError(err instanceof ApiError && err.status === 401 ? err.message : 'Something went wrong, please try again');
+      if (err instanceof ApiError && err.status === 401) setPassword('');
+      setError(err instanceof ApiError ? err.message : 'Something went wrong, please try again');
     } finally {
       setSubmitting(false);
     }

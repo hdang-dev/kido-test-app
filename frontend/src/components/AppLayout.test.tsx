@@ -30,4 +30,15 @@ describe('AppLayout', () => {
 
     expect(state.logout).toHaveBeenCalled();
   });
+
+  it('tells the user when logout failed', async () => {
+    const state = authState(aUser());
+    state.logout.mockRejectedValue(new Error('network'));
+    vi.mocked(useAuth).mockReturnValue(state);
+    renderWithRouter(<AppLayout />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Logout failed');
+  });
 });

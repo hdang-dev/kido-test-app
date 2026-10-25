@@ -48,7 +48,7 @@ describe('SignupPage', () => {
     vi.mocked(useAuth).mockReturnValue(authState());
     renderWithRouter(<SignupPage />);
 
-    await userEvent.type(screen.getByLabelText('Email'), 'trinity@test.local');
+    await userEvent.type(screen.getByLabelText('Email'), ' Trinity@Test.local'); // previewed as the backend normalises
 
     expect(screen.getByLabelText('Username (optional)')).toHaveAttribute('placeholder', 'trinity');
   });
