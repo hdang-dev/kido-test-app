@@ -76,11 +76,32 @@ class MeControllerTest {
     }
 
     @Test
+    void requiresBothFieldsSoAPartialBodyCannotWipeTheOther() throws Exception {
+        Cookie session = client.signup(uniqueEmail());
+        client.put("/api/me", Map.of("username", "Keep", "bio", "Keep"), session);
+
+        client.put("/api/me", Map.of("bio", "only bio"), session)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.username").exists());
+        client.getAs(session, "/api/me").andExpect(jsonPath("$.username").value("Keep"));
+    }
+
+    @Test
+    void countsLengthsLikeTheDatabaseDoes() throws Exception {
+        Cookie session = client.signup(uniqueEmail());
+        String fiftyEmoji = "😀".repeat(50);           // 100 UTF-16 units, 50 code points: fits varchar(50)
+
+        client.put("/api/me", Map.of("username", "  " + fiftyEmoji + "  ", "bio", ""), session)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value(fiftyEmoji));
+    }
+
+    @Test
     void ignoresAttemptsToChangeEmailOrRole() throws Exception {
         String email = uniqueEmail();
         Cookie session = client.signup(email);
 
-        client.put("/api/me", Map.of("username", "x", "email", "evil@test.local", "role", "SUPER_ADMIN"), session)
+        client.put("/api/me", Map.of("username", "x", "bio", "", "email", "evil@test.local", "role", "SUPER_ADMIN"), session)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(email))
                 .andExpect(jsonPath("$.role").value("USER"));
@@ -88,10 +109,10 @@ class MeControllerTest {
 
     @Test
     void profileEndpointsNeedAuthenticationAndCsrf() throws Exception {
-        client.put("/api/me", Map.of("username", "x"), null).andExpect(status().isUnauthorized());
+        client.put("/api/me", Map.of("username", "x", "bio", ""), null).andExpect(status().isUnauthorized());
 
         Cookie session = client.signup(uniqueEmail());
-        client.putWithoutCsrf("/api/me", Map.of("username", "x"), session).andExpect(status().isForbidden());
+        client.putWithoutCsrf("/api/me", Map.of("username", "x", "bio", ""), session).andExpect(status().isForbidden());
         client.putWithoutCsrf("/api/me/password", passwordChange(PASSWORD, NEW_PASSWORD, NEW_PASSWORD), session)
                 .andExpect(status().isForbidden());
     }
@@ -125,6 +146,22 @@ class MeControllerTest {
         assertThat(rotated.getValue()).isNotEqualTo(laptop.getValue());
         client.getAs(laptop, "/api/me").andExpect(status().isUnauthorized());  // old id is dead
         client.getAs(rotated, "/api/me").andExpect(status().isOk());           // this device stays in
+    }
+
+    @Test
+    void passwordChangeRotatesTheCsrfTokenAndKeepsRememberMe() throws Exception {
+        String email = uniqueEmail();
+        client.signup(email);
+        Cookie remembered = client.post("/api/auth/login",
+                        Map.of("email", email, "password", PASSWORD, "rememberMe", true), null)
+                .andReturn().getResponse().getCookie("SESSION");
+
+        var response = client.put("/api/me/password", passwordChange(PASSWORD, NEW_PASSWORD, NEW_PASSWORD), remembered)
+                .andExpect(status().isNoContent())
+                .andReturn().getResponse();
+
+        assertThat(response.getCookie("XSRF-TOKEN")).as("new CSRF token, like at login").isNotNull();
+        assertThat(response.getCookie("SESSION").getMaxAge()).as("still a persistent cookie").isPositive();
     }
 
     @Test
