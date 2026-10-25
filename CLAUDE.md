@@ -13,8 +13,8 @@ A monorepo for a pre-interview test. It is a small auth app with sign up, login 
 ## Commands
 | What | Command |
 |------|---------|
-| Start Postgres | `docker compose up -d` (repo root) |
-| Run BE (:8080) | `cd backend && mvn spring-boot:run` |
+| Start Postgres | `docker compose up -d --wait` (repo root) |
+| Run BE (:8080, `dev` profile) | `cd backend && mvn spring-boot:run` |
 | Run FE (:5173, proxies `/api`) | `cd frontend && npm run dev` |
 | Test BE (needs Docker running) | `cd backend && mvn test` |
 | Test FE | `cd frontend && npm test` |

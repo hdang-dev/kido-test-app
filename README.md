@@ -18,8 +18,8 @@ A simple authentication and user management app with:
 
 ## Run
 ```bash
-docker compose up -d                       # 1. start Postgres
-cd backend && mvn spring-boot:run          # 2. API on :8080 (Flyway migrates the database on startup)
+docker compose up -d --wait                # 1. start Postgres, wait until healthy
+cd backend && mvn spring-boot:run          # 2. API on :8080, dev profile (Flyway migrates the database on startup)
 cd frontend && npm install && npm run dev  # 3. UI on :5173 (forwards /api to the backend)
 ```
 Run each of steps 2 and 3 in its own terminal.
@@ -34,10 +34,10 @@ cd frontend && npm test && npm run build
 ```
 
 ## Configuration
-| Env var | Default (dev only) | Purpose |
+| Env var | Default (`dev` profile only) | Purpose |
 |---------|--------------------|---------|
-| `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` | `jdbc:postgresql://localhost:5432/testapp` / `testapp` / `testapp` | Database connection |
-| `APP_SUPER_ADMIN_EMAIL` / `APP_SUPER_ADMIN_PASSWORD` | `superadmin@kido.local` / `SuperAdmin@123` | The super admin created on first startup |
+| `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` | `jdbc:postgresql://localhost:5432/testapp` / `testapp` / `testapp` | Database connection (**required** outside the `dev` profile) |
+| `APP_SUPER_ADMIN_EMAIL` / `APP_SUPER_ADMIN_PASSWORD` | `superadmin@kido.local` / `SuperAdmin@123` | The super admin created on first startup (**required** outside `dev`) |
 
 ## Demo accounts
 | Email | Password | Role |

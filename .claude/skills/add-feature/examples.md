@@ -13,7 +13,7 @@ import jakarta.validation.constraints.Size;
 
 public record ChangePasswordRequest(
         @NotBlank String currentPassword,
-        @NotBlank @Size(min = 8, max = 100)
+        @NotBlank @Size(min = 8, max = 72) // BCrypt ignores bytes past 72 (design.md §8)
         @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*\\d).+$", message = "must contain a letter and a digit")
         String newPassword,
         @NotBlank String confirmPassword) {
@@ -34,14 +34,18 @@ public class UserService {
     }
 
     @Transactional
-    public void changePassword(String username, ChangePasswordRequest request) {
-        AppUser user = repository.findByUsername(username)
+    // email = principal name = identity; username is a non-unique display name (design.md D5)
+    public void changePassword(String email, ChangePasswordRequest request) {
+        AppUser user = repository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("Authenticated user not found"));
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
             throw new InvalidPasswordException("currentPassword", "Current password is incorrect");
         }
         if (!request.newPassword().equals(request.confirmPassword())) {
             throw new InvalidPasswordException("confirmPassword", "Passwords do not match");
+        }
+        if (passwordEncoder.matches(request.newPassword(), user.getPasswordHash())) {
+            throw new InvalidPasswordException("newPassword", "New password must differ from the current one");
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
     }
@@ -73,6 +77,7 @@ public class MeController {
 ```java
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(TestcontainersConfiguration.class) // always: tests must never hit the dev database (design.md D7)
 class MeControllerTest {
 
     @Autowired MockMvc mvc;
