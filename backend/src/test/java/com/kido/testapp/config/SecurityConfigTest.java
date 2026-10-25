@@ -87,9 +87,9 @@ class SecurityConfigTest {
 
     @Test
     void loginAndSignupArePublic() throws Exception {
-        // 404 (not 401): reachable anonymously; the controllers arrive in phase 2.
-        mvc.perform(post("/api/auth/login").with(SpaCsrf.token(mvc))).andExpect(status().isNotFound());
-        mvc.perform(post("/api/auth/signup").with(SpaCsrf.token(mvc))).andExpect(status().isNotFound());
+        // 400 (missing body), not 401: the endpoints are reachable anonymously
+        mvc.perform(post("/api/auth/login").with(SpaCsrf.token(mvc))).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/auth/signup").with(SpaCsrf.token(mvc))).andExpect(status().isBadRequest());
     }
 
     @Test

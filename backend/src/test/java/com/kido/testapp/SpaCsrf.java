@@ -26,7 +26,10 @@ public final class SpaCsrf {
             throw new IllegalStateException("No XSRF-TOKEN cookie issued — was csrf() used somewhere?");
         }
         return request -> {
-            request.setCookies(cookie);
+            Cookie[] existing = request.getCookies() == null ? new Cookie[0] : request.getCookies();
+            Cookie[] all = java.util.Arrays.copyOf(existing, existing.length + 1);
+            all[existing.length] = cookie; // keep e.g. the SESSION cookie set on the builder
+            request.setCookies(all);
             request.addHeader("X-XSRF-TOKEN", cookie.getValue());
             return request;
         };

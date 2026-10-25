@@ -9,3 +9,17 @@ export interface MeResponse {
   bio: string | null;
   role: Role;
 }
+
+export interface SignupRequest {
+  email: string;
+  password: string;
+  confirmPassword: string;
+  username?: string;
+  bio?: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+  rememberMe: boolean;
+}
