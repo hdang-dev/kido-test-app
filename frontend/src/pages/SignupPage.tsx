@@ -1,4 +1,4 @@
-// TODO (phase 2): email / password / confirm (+ optional username, bio) → POST /api/auth/signup → setUser → navigate('/')
+// TODO (phase 2): email / password / confirm (+ optional username, bio) → POST /api/auth/signup → setUser (GuestRoute then redirects to /)
 export function SignupPage() {
   return <h1 className="text-2xl font-semibold">Sign up</h1>;
 }

@@ -9,6 +9,3 @@ export interface MeResponse {
   bio: string | null;
   role: Role;
 }
-
-// Role hierarchy SUPER_ADMIN > ADMIN > USER (design.md §5)
-export const isAdmin = (role: Role) => role === 'ADMIN' || role === 'SUPER_ADMIN';
