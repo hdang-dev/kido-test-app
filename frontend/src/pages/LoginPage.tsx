@@ -1,4 +1,4 @@
-// TODO (phase 2): username/password form → useAuth().login → redirect to location.state.from or /profile
+// TODO (phase 2): email / password / remember me → useAuth().login → navigate to location.state.from or '/'
 export function LoginPage() {
-  return <h1>Login</h1>;
+  return <h1 className="text-2xl font-semibold">Log in</h1>;
 }

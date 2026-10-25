@@ -1,4 +1,4 @@
-// TODO (phase 4): list users from GET /api/admin/users, create user form
+// TODO (phase 4): paginated GET /api/admin/users, grant / revoke admin per design.md §5
 export function AdminUsersPage() {
-  return <h1>Users</h1>;
+  return <h1 className="text-2xl font-semibold">User management</h1>;
 }

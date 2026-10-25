@@ -1,4 +1,5 @@
 import { Navigate, Outlet } from 'react-router-dom';
+import { isAdmin } from '../api/types';
 import { useAuth } from '../context/AuthContext';
 
 // UX guard only — /api/admin/** is enforced server-side.
@@ -7,6 +8,6 @@ export function AdminRoute() {
 
   if (loading) return <p>Loading…</p>;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== 'ADMIN') return <Navigate to="/profile" replace />;
+  if (!isAdmin(user.role)) return <Navigate to="/" replace />;
   return <Outlet />;
 }
