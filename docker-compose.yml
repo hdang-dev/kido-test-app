@@ -1,0 +1,22 @@
+# Local development database. Credentials are dev-only defaults, never reuse them elsewhere.
+# Keep the image tag in sync with POSTGRES_IMAGE in backend/src/test/java/com/kido/testapp/TestcontainersConfiguration.java
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kido-testapp-postgres
+    environment:
+      POSTGRES_DB: testapp
+      POSTGRES_USER: testapp
+      POSTGRES_PASSWORD: testapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testapp -d testapp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
