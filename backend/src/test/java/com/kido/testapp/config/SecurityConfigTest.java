@@ -77,12 +77,12 @@ class SecurityConfigTest {
                 .andExpect(jsonPath("$.message").value("Access denied"));
     }
 
-    /** 404 = passed authorization; the endpoint itself arrives in phase 4. */
+    /** The role hierarchy lets SUPER_ADMIN through hasRole(ADMIN). */
     @ParameterizedTest
     @ValueSource(strings = {"ADMIN", "SUPER_ADMIN"})
     void adminsPassAdminApiAuthorization(String role) throws Exception {
         mvc.perform(get("/api/admin/users").with(user("a@test.local").roles(role)))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk());
     }
 
     @Test
