@@ -1,5 +1,7 @@
 package com.kido.testapp.user;
 
+import java.time.Instant;
+
 import com.kido.testapp.common.ApiException;
 import com.kido.testapp.common.Text;
 import org.hibernate.exception.ConstraintViolationException;
@@ -60,15 +62,18 @@ public class UserService {
     }
 
     /**
-     * Self-service password change (design.md §6). After the checks pass, every other session of the
-     * user is revoked <em>before</em> the new hash is written. Spring Session commits deletions on its
-     * own, so the failure modes are both safe: revocation fails → password unchanged; the hash write
-     * fails → sessions already revoked. Never "password changed, but a stolen session still works".
+     * Self-service password change (design.md §6). The row is locked FOR UPDATE, so two concurrent changes
+     * are serialised and the second one re-checks the current password against the first one's result.
+     * Writing the new hash also bumps the credential version: SessionValidityFilter then signs out every
+     * session created before it, whatever the timing. The other sessions are also deleted right away.
+     *
+     * @return the new credential version, to stamp on the caller's (rotated) session
      */
     @Transactional
-    public void changePassword(String email, String currentPassword, String newPassword, String confirmPassword,
-                               String keepSessionId) {
-        AppUser user = getByEmail(email);
+    public Instant changePassword(String email, String currentPassword, String newPassword, String confirmPassword,
+                                  String keepSessionId) {
+        AppUser user = repository.findByEmailForUpdate(Emails.normalise(email))
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Authentication required"));
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
             throw ApiException.field(HttpStatus.BAD_REQUEST, "currentPassword", "Current password is incorrect");
         }
@@ -78,8 +83,9 @@ public class UserService {
         if (newPassword.equals(currentPassword)) {
             throw ApiException.field(HttpStatus.BAD_REQUEST, "newPassword", "New password must differ from the current one");
         }
+        user.changePasswordHash(passwordEncoder.encode(newPassword));
         userSessions.expireAllExcept(user.getEmail(), keepSessionId);
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        return user.getPasswordChangedAt();
     }
 
     /** For the signed-in principal. A missing row means the account vanished mid-session → treat as logged out. */

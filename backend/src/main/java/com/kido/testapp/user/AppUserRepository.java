@@ -19,9 +19,14 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
 
     boolean existsByRole(Role role);
 
-    /** Role of the signed-in user, checked on every request (auth/CurrentRoleFilter). */
-    @Query("select u.role from AppUser u where u.email = :email")
-    Optional<Role> findRoleByEmail(@Param("email") String email);
+    /** What a session must still match, checked on every request (auth/SessionValidityFilter). */
+    @Query("select new com.kido.testapp.user.AuthState(u.role, u.passwordChangedAt) from AppUser u where u.email = :email")
+    Optional<AuthState> findAuthStateByEmail(@Param("email") String email);
+
+    /** FOR UPDATE: concurrent password changes of one account are serialised (the second re-checks the hash). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from AppUser u where u.email = :email")
+    Optional<AppUser> findByEmailForUpdate(@Param("email") String email);
 
     /** FOR SHARE: the actor's role can't change until the role-change transaction commits. */
     @Lock(LockModeType.PESSIMISTIC_READ)

@@ -17,11 +17,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * Role changes that bypass every session sweep (written straight to the DB, like a race where a session
- * was created with the old role) must still take effect on the very next request.
+ * Changes that bypass every session sweep (written straight to the DB, like a race where a session was
+ * created with the old role or the old password) must still take effect on the very next request.
  */
 @IntegrationTest
-class CurrentRoleFilterTest {
+class SessionValidityFilterTest {
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
@@ -51,6 +51,20 @@ class CurrentRoleFilterTest {
 
         client.getAs(adminSession, "/api/admin/users").andExpect(status().isUnauthorized());
         client.getAs(adminSession, "/api/me").andExpect(status().isUnauthorized()); // session is gone for good
+    }
+
+    @Test
+    void aSessionOlderThanTheLastPasswordChangeIsSignedOut() throws Exception {
+        String email = uniqueEmail();
+        Cookie session = client.signup(email);
+        client.getAs(session, "/api/me").andExpect(status().isOk());
+
+        // e.g. a login that verified the OLD password just before the change committed: no sweep removes it
+        var user = repository.findByEmail(email).orElseThrow();
+        user.changePasswordHash(user.getPasswordHash());
+        repository.saveAndFlush(user);
+
+        client.getAs(session, "/api/me").andExpect(status().isUnauthorized());
     }
 
     @Test

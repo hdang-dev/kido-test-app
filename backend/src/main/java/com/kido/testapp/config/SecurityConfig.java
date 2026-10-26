@@ -7,7 +7,7 @@ import java.util.List;
 import jakarta.servlet.http.HttpServletResponse;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kido.testapp.auth.CurrentRoleFilter;
+import com.kido.testapp.auth.SessionValidityFilter;
 import com.kido.testapp.common.ErrorResponse;
 import com.kido.testapp.user.AppUserRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,8 +64,8 @@ public class SecurityConfig {
                         .csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(csrfTokenRequestHandler))
                 .securityContext(context -> context.securityContextRepository(securityContextRepository))
-                // Stale role in the session (changed since login) -> signed out before authorization (design.md §5)
-                .addFilterBefore(new CurrentRoleFilter(appUserRepository), AuthorizationFilter.class)
+                // Session snapshot no longer true (role changed / password changed since login) -> signed out before authorization (D9, D10)
+                .addFilterBefore(new SessionValidityFilter(appUserRepository), AuthorizationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup").permitAll()
                         .requestMatchers("/error").permitAll()

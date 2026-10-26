@@ -86,7 +86,7 @@ public class AdminUserService {
 
     /**
      * Courtesy sweep so the target is signed out everywhere right away. Correctness doesn't depend on it:
-     * CurrentRoleFilter drops any session whose role no longer matches the database. So a failure here is
+     * SessionValidityFilter drops any session whose role no longer matches the database. So a failure here is
      * logged, never turned into an error for a change that has already committed.
      */
     private void signOutAfterCommit(String email) {
@@ -96,7 +96,7 @@ public class AdminUserService {
                 try {
                     userSessions.expireAll(email);
                 } catch (RuntimeException e) {
-                    log.warn("Could not expire sessions of {} after role change; CurrentRoleFilter will", email, e);
+                    log.warn("Could not expire sessions of {} after role change; SessionValidityFilter will", email, e);
                 }
             }
         });
