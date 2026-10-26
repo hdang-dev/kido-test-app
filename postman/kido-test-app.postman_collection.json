@@ -1,0 +1,190 @@
+{
+  "info": {
+    "name": "kido-test-app",
+    "description": "API of kido-test-app (docs/design.md §7).\n\nRun the backend with the dev profile (`mvn spring-boot:run`) so cookies are not Secure over http.\n\nHow auth works here:\n- Postman's cookie jar stores and sends `SESSION` and `XSRF-TOKEN` automatically.\n- The collection's post-response script copies the `XSRF-TOKEN` cookie into the `xsrf` variable after every response.\n- The collection's pre-request script sends it back as the `X-XSRF-TOKEN` header on POST/PUT/DELETE.\n- Start with **0. Get CSRF token** (or any GET) so a token exists before the first POST.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// CSRF: echo the XSRF-TOKEN cookie value as a header on state-changing requests (design.md D3)",
+          "const method = pm.request.method.toUpperCase();",
+          "const token = pm.collectionVariables.get('xsrf');",
+          "if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && token) {",
+          "  pm.request.headers.upsert({ key: 'X-XSRF-TOKEN', value: token });",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Keep the latest XSRF-TOKEN (it is issued on first contact, rotated at login/password change, deleted at logout)",
+          "const token = pm.cookies.get('XSRF-TOKEN');",
+          "if (token) { pm.collectionVariables.set('xsrf', decodeURIComponent(token)); }"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "xsrf", "value": "" },
+    { "key": "email", "value": "neo@test.local" },
+    { "key": "password", "value": "Passw0rd!" },
+    { "key": "newPassword", "value": "N3wPassword!" },
+    { "key": "superAdminEmail", "value": "superadmin@kido.local" },
+    { "key": "superAdminPassword", "value": "SuperAdmin@123" },
+    { "key": "userId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0. Get CSRF token (GET /api/me)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/me",
+        "description": "Anonymous: 401, but the response sets the XSRF-TOKEN cookie needed for the first POST."
+      }
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Sign up",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) { pm.collectionVariables.set('userId', pm.response.json().id); }",
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/signup",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"confirmPassword\": \"{{password}}\",\n  \"username\": \"\",\n  \"bio\": \"\"\n}"
+            },
+            "description": "201 + logged in (SESSION cookie). 409 if the email exists (any case). 400 with fieldErrors on invalid input."
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"rememberMe\": false\n}"
+            },
+            "description": "200 + new SESSION and XSRF-TOKEN cookies. Wrong email or password: 401 \"Invalid email or password\". rememberMe=true: 30 days idle and a persistent cookie."
+          }
+        },
+        {
+          "name": "Login as super admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{superAdminEmail}}\",\n  \"password\": \"{{superAdminPassword}}\",\n  \"rememberMe\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/logout",
+            "description": "204. Deletes the session and both cookies. Run 0. Get CSRF token before the next POST."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Me (logged in)",
+      "item": [
+        {
+          "name": "Get my profile",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/me", "description": "200 when logged in, 401 otherwise." }
+        },
+        {
+          "name": "Update profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/me",
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"Neo\",\n  \"bio\": \"Follow the white rabbit.\"\n}" },
+            "description": "Both fields required. Blank username resets to the email local part, blank bio clears it."
+          }
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/me/password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{password}}\",\n  \"newPassword\": \"{{newPassword}}\",\n  \"confirmPassword\": \"{{newPassword}}\"\n}"
+            },
+            "description": "204. Other sessions of this user are deleted; this one gets a new SESSION and XSRF-TOKEN. Afterwards swap the password/newPassword variables to log in again."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin (ADMIN or SUPER_ADMIN)",
+      "item": [
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "USER: 403. Anonymous: 401."
+          }
+        },
+        {
+          "name": "Grant admin",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/admin/users/{{userId}}/role",
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"ADMIN\"\n}" },
+            "description": "Any ADMIN+. The target's sessions are signed out. userId is set by Sign up (or copy one from List users)."
+          }
+        },
+        {
+          "name": "Revoke admin (super admin only)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/admin/users/{{userId}}/role",
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"USER\"\n}" },
+            "description": "Only SUPER_ADMIN; a regular admin gets 403. Self change: 403. Target is the super admin: 403. role SUPER_ADMIN: 400."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -58,6 +58,13 @@ Any other account can be created through the sign-up page.
 7. **Users**: click **Make admin** on `neo@test.local` → confirm. Neo's sessions are signed out; when Neo logs in again, Neo sees **Users**.
 8. As super admin, **Remove admin** on Neo. A regular admin wouldn't see that button, and the API would refuse it (403).
 
+## API testing with Postman
+Import [postman/kido-test-app.postman_collection.json](postman/kido-test-app.postman_collection.json) and run it against the backend (`http://localhost:8080`, `dev` profile).
+- Postman's cookie jar handles the `SESSION` and `XSRF-TOKEN` cookies.
+- Collection scripts copy `XSRF-TOKEN` into the `X-XSRF-TOKEN` header on POST/PUT/DELETE.
+- Run **`0. Get CSRF token`** first (it returns 401, but sets the token cookie).
+- Set your own `email` / `password` in the collection's **Variables** tab (**Current value**, then Ctrl+S).
+
 ## Docs
 - [Requirements](docs/requirements.md)
 - [Design](docs/design.md): architecture, key decisions, roles, flows, API, and phase status
