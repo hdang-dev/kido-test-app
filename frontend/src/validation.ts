@@ -13,11 +13,12 @@ export function emailError(email: string): string | undefined {
   return undefined;
 }
 
-// Mirrors PasswordPolicy: >= 8 code points, <= 72 UTF-8 bytes (BCrypt), a letter and a digit.
+// Mirrors PasswordPolicy: >= 8 code points, <= 72 UTF-8 bytes (BCrypt), a letter and a digit (any script,
+// like Java's Character.isLetter / isDigit).
 export function passwordError(password: string): string | undefined {
   const codePoints = [...password].length;
   const bytes = new TextEncoder().encode(password).length;
-  if (codePoints < 8 || bytes > 72 || !/\p{L}/u.test(password) || !/\d/.test(password)) {
+  if (codePoints < 8 || bytes > 72 || !/\p{L}/u.test(password) || !/\p{Nd}/u.test(password)) {
     return PASSWORD_MESSAGE;
   }
   return undefined;
