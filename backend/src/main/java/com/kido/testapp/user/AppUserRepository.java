@@ -28,10 +28,17 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
     @Query("select u from AppUser u where u.email = :email")
     Optional<AppUser> findByEmailForUpdate(@Param("email") String email);
 
+    /** Projections for lock-free pre-checks (no entity is loaded, so later locking reads return fresh rows). */
+    @Query("select u.id from AppUser u where u.email = :email")
+    Optional<UUID> findIdByEmail(@Param("email") String email);
+
+    @Query("select u.role from AppUser u where u.id = :id")
+    Optional<Role> findRoleById(@Param("id") UUID id);
+
     /** FOR SHARE: the actor's role can't change until the role-change transaction commits. */
     @Lock(LockModeType.PESSIMISTIC_READ)
-    @Query("select u from AppUser u where u.email = :email")
-    Optional<AppUser> findByEmailForShare(@Param("email") String email);
+    @Query("select u from AppUser u where u.id = :id")
+    Optional<AppUser> findByIdForShare(@Param("id") UUID id);
 
     /** FOR UPDATE: concurrent role changes of the same target are serialised. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
