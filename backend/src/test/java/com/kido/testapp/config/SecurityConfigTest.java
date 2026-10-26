@@ -45,6 +45,16 @@ class SecurityConfigTest {
     }
 
     @Test
+    void cookiesAreSecureOutsideTheDevProfile() throws Exception {
+        Cookie csrf = mvc.perform(get("/api/me")).andReturn().getResponse().getCookie("XSRF-TOKEN");
+        Cookie session = client().signup(AuthTestClient.uniqueEmail());
+
+        assertThat(csrf.getSecure()).as("XSRF-TOKEN only over https").isTrue();
+        assertThat(session.getSecure()).as("SESSION only over https").isTrue();
+        assertThat(session.isHttpOnly()).isTrue();
+    }
+
+    @Test
     void anyResponseIssuesReadableCsrfCookie() throws Exception {
         Cookie cookie = mvc.perform(get("/api/me")).andReturn().getResponse().getCookie("XSRF-TOKEN");
         assertThat(cookie).isNotNull();

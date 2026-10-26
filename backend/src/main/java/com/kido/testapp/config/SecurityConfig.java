@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kido.testapp.auth.CurrentRoleFilter;
 import com.kido.testapp.common.ErrorResponse;
 import com.kido.testapp.user.AppUserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -30,6 +31,7 @@ import org.springframework.security.web.context.RequestAttributeSecurityContextR
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfAuthenticationStrategy;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
 import org.springframework.session.security.web.authentication.SpringSessionRememberMeServices;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -54,12 +56,13 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper,
                                             CsrfTokenRepository csrfTokenRepository,
+                                            CsrfTokenRequestHandler csrfTokenRequestHandler,
                                             SecurityContextRepository securityContextRepository,
                                             AppUserRepository appUserRepository) throws Exception {
         http
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(csrfTokenRepository)
-                        .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()))
+                        .csrfTokenRequestHandler(csrfTokenRequestHandler))
                 .securityContext(context -> context.securityContextRepository(securityContextRepository))
                 // Stale role in the session (changed since login) -> signed out before authorization (design.md §5)
                 .addFilterBefore(new CurrentRoleFilter(appUserRepository), AuthorizationFilter.class)
@@ -90,9 +93,21 @@ public class SecurityConfig {
 
     // ---- Shared with auth/SessionLogin: a controller-based login must do what formLogin would (design.md §6)
 
+    /**
+     * XSRF-TOKEN cookie, readable by the SPA. Secure follows the session cookie setting
+     * (server.servlet.session.cookie.secure: true by default, false only in the dev profile over plain http).
+     */
     @Bean
-    CsrfTokenRepository csrfTokenRepository() {
-        return CookieCsrfTokenRepository.withHttpOnlyFalse();
+    CsrfTokenRepository csrfTokenRepository(@Value("${server.servlet.session.cookie.secure}") boolean secureCookies) {
+        var repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setCookieCustomizer(cookie -> cookie.secure(secureCookies).sameSite("Lax"));
+        return repository;
+    }
+
+    /** One instance for both CsrfFilter and the login-time rotation, so they can never be configured differently. */
+    @Bean
+    CsrfTokenRequestHandler csrfTokenRequestHandler() {
+        return new SpaCsrfTokenRequestHandler();
     }
 
     @Bean
@@ -104,9 +119,10 @@ public class SecurityConfig {
 
     /** On login: new session ID (anti-fixation), then a fresh CSRF token. */
     @Bean
-    SessionAuthenticationStrategy sessionAuthenticationStrategy(CsrfTokenRepository csrfTokenRepository) {
+    SessionAuthenticationStrategy sessionAuthenticationStrategy(CsrfTokenRepository csrfTokenRepository,
+                                                                CsrfTokenRequestHandler csrfTokenRequestHandler) {
         var csrf = new CsrfAuthenticationStrategy(csrfTokenRepository);
-        csrf.setRequestHandler(new SpaCsrfTokenRequestHandler());
+        csrf.setRequestHandler(csrfTokenRequestHandler);
         return new CompositeSessionAuthenticationStrategy(List.of(new ChangeSessionIdAuthenticationStrategy(), csrf));
     }
 
