@@ -14,3 +14,5 @@ Spring Boot 3.5 · Java 17 · base package `com.kido.testapp`
 - Spring tests are annotated `@IntegrationTest` (Testcontainers + `test` profile), never bare `@SpringBootTest`. Send CSRF tokens on mutating requests with `SpaCsrf.token(mvc)`. **Never use spring-security-test's `csrf()`**: it swaps the shared `CsrfFilter` repository and silently breaks `XSRF-TOKEN` cookies for every later test.
 - For business-rule failures, throw `ApiException`, or `ApiException.field(status, field, msg)` for form errors. Never put submitted values in messages.
 - New-password fields use `@ValidPassword`, which delegates to `PasswordPolicy`. Never re-express the rule with `@Size`/`@Pattern`: `@Size` counts characters, but BCrypt's limit is 72 **bytes**.
+- Free-text fields (username, bio, ...) use `@MaxLength` + `@PlainText` and are normalised with `common/Text` (Unicode-aware trim/blank), never `String.strip()` / `StringUtils.hasText`.
+- Anything that creates or changes a session goes through `auth/SessionLogin`, which also stamps the credential version that `SessionValidityFilter` checks. Set a password only with `AppUser.changePasswordHash(...)`.

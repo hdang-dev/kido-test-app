@@ -6,7 +6,7 @@ These are real, tested files. Open them and copy their shape. Excerpts below sho
 |---|---|
 | Request DTO | `backend/src/main/java/com/kido/testapp/user/ChangePasswordRequest.java` |
 | Service rule | `backend/src/main/java/com/kido/testapp/user/UserService.java` → `changePassword` |
-| Controller | `backend/src/main/java/com/kido/testapp/user/MeController.java` → `changePassword` |
+| Controller | `backend/src/main/java/com/kido/testapp/auth/PasswordController.java` |
 | Backend test | `backend/src/test/java/com/kido/testapp/user/MeControllerTest.java` |
 | Test helper | `backend/src/test/java/com/kido/testapp/AuthTestClient.java` |
 | API call | `frontend/src/api/me.ts` |
@@ -31,25 +31,25 @@ public record ChangePasswordRequest(
 ```java
 @Transactional
 public void changePassword(String email, String currentPassword, String newPassword, String confirmPassword) {
-    AppUser user = getByEmail(email);
+    AppUser user = repository.findByEmailForUpdate(Emails.normalise(email)).orElseThrow(...); // row locked
     if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
         throw ApiException.field(HttpStatus.BAD_REQUEST, "currentPassword", "Current password is incorrect");
     }
     // ... confirmation, must differ ...
-    user.setPasswordHash(passwordEncoder.encode(newPassword)); // dirty checking saves it
+    user.changePasswordHash(passwordEncoder.encode(newPassword)); // also bumps the credential version (D10)
 }
 ```
 
 ## Backend: controller (identity from the session, thin orchestration)
 ```java
-@PutMapping("/password")
+@PutMapping("/api/me/password")
 @ResponseStatus(HttpStatus.NO_CONTENT)
-public void changePassword(@AuthenticationPrincipal UserDetails principal,
-                           @Valid @RequestBody ChangePasswordRequest body, HttpServletRequest request) {
-    String email = principal.getUsername();          // never from the request body or path
-    userService.changePassword(email, body.currentPassword(), body.newPassword(), body.confirmPassword());
-    userSessions.expireAllExcept(email, request.getSession().getId());
-    request.changeSessionId();
+public void changePassword(@Valid @RequestBody ChangePasswordRequest body, Authentication authentication,
+                           HttpServletRequest request, HttpServletResponse response) {
+    // identity from the session, never from the request body or path
+    Instant newCredentialVersion = userService.changePassword(authentication.getName(), body.currentPassword(),
+            body.newPassword(), body.confirmPassword(), request.getSession().getId());
+    sessionLogin.afterPasswordChange(authentication, newCredentialVersion, request, response); // session work: SessionLogin
 }
 ```
 
