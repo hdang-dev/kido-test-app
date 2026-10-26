@@ -28,13 +28,15 @@ Browser ──► Vite dev server :5173 ──/api proxy──► Spring Boot :8
 |---|----------|-----|-----------------------|
 | D1 | **Server-side session + cookie** (Spring Security), not JWT | The `HttpOnly` `SESSION` cookie (Spring Session) can't be read by JS (XSS). Sessions can be revoked instantly on logout, password change, or role change. | JWT in `localStorage`: readable by XSS and hard to revoke |
 | D2 | **Spring Session JDBC** | Sessions survive restarts. `FindByIndexNameSessionRepository` can find and expire all sessions of a user (needed by D4 and the password change). Built-in remember-me. | In-memory `HttpSession`: lost on restart and can't list a user's sessions |
-| D3 | **CSRF: cookie-to-header token** | Cookie-based auth needs CSRF protection. `CookieCsrfTokenRepository.withHttpOnlyFalse()` issues a readable `XSRF-TOKEN` cookie, and the SPA echoes it in `X-XSRF-TOKEN`. `SpaCsrfTokenRequestHandler` follows the Spring Security 6.5 reference recipe (`csrf.spa()` only exists from 7.0). | Disabling CSRF: unsafe with cookies |
+| D3 | **CSRF: cookie-to-header token** (double-submit cookie) | Cookie-based auth needs CSRF protection. `CookieCsrfTokenRepository.withHttpOnlyFalse()` issues a readable `XSRF-TOKEN` cookie, and the SPA echoes it in `X-XSRF-TOKEN`. One `SpaCsrfTokenRequestHandler` bean (the Spring Security 6.5 reference recipe; `csrf.spa()` only exists from 7.0) is shared by `CsrfFilter` and the login-time rotation. | Disabling CSRF: unsafe with cookies |
 | D4 | **3-tier roles with one seeded SUPER_ADMIN** (see §5) | Lets admins grant admin freely, but stops admins revoking each other. There is a single, non-transferable root. | 2 roles where any admin revokes any admin: admin lock-out wars. Multiple supers: the same problem one level up |
 | D5 | **Email is the identity. Username is a non-unique display name** | The default username comes from the part of the email before the @, so collisions are expected (`john@a.com`, `john@b.com`). | Unique username: forces awkward suffixes at sign-up |
 | D6 | **Flyway owns the schema** (`ddl-auto: validate`) | The schema is versioned in git and reviewable. Tests run the same migrations. | `ddl-auto: update`: invisible, unreviewable schema drift |
 | D7 | **Testcontainers Postgres in tests** | Tests use the same DB engine and migrations as the real app. | H2: dialect differences hide bugs (requires Docker running for `mvn test`) |
 | D8 | **UUID primary keys** | IDs exposed in URLs and API responses don't reveal the user count and can't be guessed (defence in depth; authorization is the real protection). Postgres generates them natively. | `bigserial`: sequential and enumerable. UUIDv7: time-ordered, but Postgres 16 can't generate it natively and it isn't needed at this scale |
-| D9 | **Re-check the role on every request** (`CurrentRoleFilter`) | Sessions store authorities from login time. Sweeping sessions on a role change narrows the stale window but can't close it (a login in flight can save a session with the old role). One indexed query per request closes it. | Sweeps only: racy. Reloading full `UserDetails` per request: more work for the same guarantee |
+| D9 | **Re-check the session snapshot on every request** (`SessionValidityFilter`) | Sessions store the role from login time. Sweeping sessions on a role change narrows the stale window but can't close it (a login in flight can save a session with the old role). One indexed query per request closes it. | Sweeps only: racy. Reloading full `UserDetails` per request: more work for the same guarantee |
+| D10 | **Credential version on sessions** (`app_user.password_changed_at`) | Each session records the version it was created with; `SessionValidityFilter` signs out sessions older than the last password change, so no session made with an old password survives, whatever the timing. The version is read *before* the password check, so a race can only produce an older stamp | Revoking other sessions only: a login racing the change could keep a session |
+| D11 | **Secure cookies by default** | `SESSION` and `XSRF-TOKEN` are `Secure` (https only); only the `dev` profile turns this off for `http://localhost` | Relying on `request.isSecure()`: wrong behind a TLS-terminating proxy |
 
 ## 4. Domain and schema
 **`app_user`** (Flyway `V1`)
@@ -43,6 +45,7 @@ Browser ──► Vite dev server :5173 ──/api proxy──► Spring Boot :8
 | `id`            | `uuid` PK, default `gen_random_uuid()` | Random (v4). Entity: `@GeneratedValue(strategy = GenerationType.UUID)` |
 | `email`         | `varchar(254)` not null | Stored lower-cased and trimmed by the app. Unique on `lower(email)`, so case-insensitive uniqueness is enforced by the DB itself |
 | `password_hash` | `varchar(100)` not null | BCrypt |
+| `password_changed_at` | `timestamptz` not null | Credential version (V4, D10). Set on creation and on every password change |
 | `username`      | `varchar(50)` not null | Display name, **not unique**. Defaults to the part of the email before the @ |
 | `bio`           | `varchar(500)` null | |
 | `role`          | `varchar(20)` not null | `USER` · `ADMIN` · `SUPER_ADMIN`. `CHECK` constraint |
@@ -66,8 +69,8 @@ Rules enforced in `AdminUserService`:
 - Nobody can change their own role.
 - The SUPER_ADMIN can never be the target of a role change.
 - `SUPER_ADMIN` is not an accepted value in role-change requests.
-- A role change takes effect **on the target's very next request**: `CurrentRoleFilter` compares the role in the session with the database on every authenticated request and signs out a stale session (D9). After commit, all of the target's sessions are also swept so they're signed out everywhere at once. That sweep is a courtesy: if it fails, it is logged, and the filter still guarantees the outcome.
-- Concurrency: the actor row is read `FOR SHARE` and the target row `FOR UPDATE`, so an admin being revoked can't finish a grant afterwards, and concurrent changes to one user are serialised.
+- A role change takes effect **on the target's very next request**: `SessionValidityFilter` compares the role in the session with the database on every authenticated request and signs out a stale session (D9). After commit, all of the target's sessions are also swept so they're signed out everywhere at once. That sweep is a courtesy: if it fails, it is logged, and the filter still guarantees the outcome.
+- Concurrency: immutable facts (self target, super-admin target) are checked first without locks. Then the actor row is locked `FOR SHARE` and the target `FOR UPDATE`, **always in id order**, so two admins acting on each other can't deadlock; roles are re-checked on the locked rows.
 
 **Bootstrap:** on startup, `SuperAdminSeeder` creates the SUPER_ADMIN from `APP_SUPER_ADMIN_EMAIL` / `APP_SUPER_ADMIN_PASSWORD` **only if none exists**. It never overwrites an existing account, and the credentials never appear in Flyway files.
 Recovery after losing the super admin password requires manual DB access (an accepted trade-off at this scope).
@@ -88,7 +91,7 @@ Recovery after losing the super admin password requires manual DB access (an acc
 
 **Profile**: `/` (the home page after login)
 - Shows email (read-only), username, and bio. They can be edited inline → `PUT /api/me`.
-- Change password: `PUT /api/me/password`. It requires the current password, and the new password must differ from it.
+- Change password: `PUT /api/me/password` (`auth/PasswordController`). It requires the current password, and the new password must differ from it. The row is locked `FOR UPDATE`, and the new hash bumps the credential version (D10).
   On success, all **other** sessions of the user are expired and the current session ID is rotated.
 
 **User management**: `/admin/users` (ADMIN and SUPER_ADMIN)
@@ -118,8 +121,8 @@ All endpoints sit under `/api` and use JSON. Errors are returned as `ErrorRespon
 |-------|------|
 | email | Required, valid format, max 254 characters, unique (case-insensitive) |
 | password | At least 8 characters and at most **72 UTF-8 bytes** (BCrypt's hard limit; Vietnamese letters take 2–3 bytes each), with at least one letter and one digit. Must equal `confirmPassword`. Enforced by `@ValidPassword` → `PasswordPolicy` |
-| username | Optional at sign-up (blank → email local part). On profile edit it is required in the body, and blank resets it to the default. Max **50 characters, counted as code points after trimming** (`@MaxLength`, same unit as Postgres `varchar`) |
-| bio | Optional; blank clears it. Max **500** code points after trimming (`@MaxLength`) |
+| username | Optional at sign-up (blank → email local part). On profile edit it is required in the body, and blank resets it to the default. Max **50 characters, counted as code points after trimming** (`@MaxLength`, same unit as Postgres `varchar`). No control characters (`@PlainText`). Unicode spaces such as no-break spaces count as blank (`Text`) |
+| bio | Optional; blank clears it. Max **500** code points after trimming (`@MaxLength`). No control characters except line breaks and tabs (`@PlainText(multiline = true)`) |
 
 Validation runs on both sides: on the frontend for UX, and on the backend as the authority.
 
@@ -134,7 +137,8 @@ Validation runs on both sides: on the frontend for UX, and on the backend as the
 ## 10. Known trade-offs
 - Sign-up's "email already used" lets someone check whether an email is registered. The feature asks for it explicitly, so it is accepted.
 - There is no email verification and no "forgot password" flow (out of scope).
-- There is no rate limiting or lockout on login **or on the current-password check of the password change** (out of scope; first item for Phase 5 / next steps).
+- There is no rate limiting or lockout on login or on the current-password check of the password change. **Decided in Phase 5 not to add it** for this project's scope; it would be the first item for a production version.
+- Login reads the user twice (once to authenticate, once for the response). One extra indexed query; avoiding it would mean storing more user data in the session.
 
 ## 11. Delivery process
 - **One phase = one branch (`phase/N-name`) = one PR to `main`.** The PR description lists what changed and how it was verified.
@@ -151,5 +155,5 @@ Validation runs on both sides: on the frontend for UX, and on the backend as the
 | 1 | Security core | `V1` and `V2` migrations, `AppUser`, `UserDetailsService`, `SecurityConfig` (session, CSRF, 401/403 JSON, role hierarchy), Spring Session JDBC, `SuperAdminSeeder`, `GlobalExceptionHandler` | ✅ done | [#2](https://github.com/hdang-dev/kido-test-app/pull/2) |
 | 2 | Sign up / Login / Logout | Signup, login (remember me), logout, and `/api/me` on BE and FE; `SignupPage`, `LoginPage`, auth context, guards. Login must rotate the session ID and CSRF token and persist the context (§6) | ✅ done | [#3](https://github.com/hdang-dev/kido-test-app/pull/3) |
 | 3 | Profile | Edit username and bio, change password (expires other sessions), BE and FE tests | ✅ done | [#4](https://github.com/hdang-dev/kido-test-app/pull/4) |
-| 4 | User management | Paginated list, grant and revoke admin per §5, session expiry on role change, RBAC tests | 🔵 in review | [#5](https://github.com/hdang-dev/kido-test-app/pull/5) |
-| 5 | Hardening and wrap-up | `security-review` skill pass and fixes, README, demo script | ⬜ | |
+| 4 | User management | Paginated list, grant and revoke admin per §5, session expiry on role change, RBAC tests | ✅ done | [#5](https://github.com/hdang-dev/kido-test-app/pull/5) |
+| 5 | Hardening and wrap-up | Full-codebase `/code-review` and `security-review`; fixes (credential version D10, Secure cookies D11, admin lock ordering, input sanitising, frontend/backend rule parity); docs and README | 🔵 in review | [#6](https://github.com/hdang-dev/kido-test-app/pull/6) |

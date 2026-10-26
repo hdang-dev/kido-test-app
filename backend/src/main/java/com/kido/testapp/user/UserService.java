@@ -1,12 +1,15 @@
 package com.kido.testapp.user;
 
+import java.time.Instant;
+
 import com.kido.testapp.common.ApiException;
+import com.kido.testapp.common.Text;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 @Service
 public class UserService {
@@ -36,13 +39,16 @@ public class UserService {
         if (repository.existsByEmail(normalisedEmail)) {
             throw ApiException.field(HttpStatus.CONFLICT, "email", EMAIL_TAKEN);
         }
-        String displayName = StringUtils.hasText(username) ? username.strip() : Emails.defaultUsername(normalisedEmail);
+        String displayName = Text.isBlank(username) ? Emails.defaultUsername(normalisedEmail) : Text.trim(username);
         var user = new AppUser(normalisedEmail, passwordEncoder.encode(password), displayName,
-                StringUtils.hasText(bio) ? bio.strip() : null, Role.USER);
+                Text.isBlank(bio) ? null : Text.trim(bio), Role.USER);
         try {
             return repository.saveAndFlush(user); // flush now so a concurrent duplicate surfaces here, not at commit
-        } catch (DataIntegrityViolationException race) {
-            throw ApiException.field(HttpStatus.CONFLICT, "email", EMAIL_TAKEN);
+        } catch (DataIntegrityViolationException e) {
+            if (violates(e, "uq_app_user_email_ci")) { // a concurrent sign-up with the same email won the race
+                throw ApiException.field(HttpStatus.CONFLICT, "email", EMAIL_TAKEN);
+            }
+            throw e; // anything else is a real error, not "email taken"
         }
     }
 
@@ -50,21 +56,24 @@ public class UserService {
     @Transactional
     public AppUser updateProfile(String email, String username, String bio) {
         AppUser user = getByEmail(email);
-        user.setUsername(StringUtils.hasText(username) ? username.strip() : Emails.defaultUsername(user.getEmail()));
-        user.setBio(StringUtils.hasText(bio) ? bio.strip() : null);
+        user.setUsername(Text.isBlank(username) ? Emails.defaultUsername(user.getEmail()) : Text.trim(username));
+        user.setBio(Text.isBlank(bio) ? null : Text.trim(bio));
         return user; // dirty checking writes it on commit
     }
 
     /**
-     * Self-service password change (design.md §6). After the checks pass, every other session of the
-     * user is revoked <em>before</em> the new hash is written. Spring Session commits deletions on its
-     * own, so the failure modes are both safe: revocation fails → password unchanged; the hash write
-     * fails → sessions already revoked. Never "password changed, but a stolen session still works".
+     * Self-service password change (design.md §6). The row is locked FOR UPDATE, so two concurrent changes
+     * are serialised and the second one re-checks the current password against the first one's result.
+     * Writing the new hash also bumps the credential version: SessionValidityFilter then signs out every
+     * session created before it, whatever the timing. The other sessions are also deleted right away.
+     *
+     * @return the new credential version, to stamp on the caller's (rotated) session
      */
     @Transactional
-    public void changePassword(String email, String currentPassword, String newPassword, String confirmPassword,
-                               String keepSessionId) {
-        AppUser user = getByEmail(email);
+    public Instant changePassword(String email, String currentPassword, String newPassword, String confirmPassword,
+                                  String keepSessionId) {
+        AppUser user = repository.findByEmailForUpdate(Emails.normalise(email))
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Authentication required"));
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
             throw ApiException.field(HttpStatus.BAD_REQUEST, "currentPassword", "Current password is incorrect");
         }
@@ -74,8 +83,9 @@ public class UserService {
         if (newPassword.equals(currentPassword)) {
             throw ApiException.field(HttpStatus.BAD_REQUEST, "newPassword", "New password must differ from the current one");
         }
+        user.changePasswordHash(passwordEncoder.encode(newPassword));
         userSessions.expireAllExcept(user.getEmail(), keepSessionId);
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        return user.getPasswordChangedAt();
     }
 
     /** For the signed-in principal. A missing row means the account vanished mid-session → treat as logged out. */
@@ -83,5 +93,14 @@ public class UserService {
     public AppUser getByEmail(String email) {
         return repository.findByEmail(Emails.normalise(email))
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Authentication required"));
+    }
+
+    private static boolean violates(DataIntegrityViolationException e, String constraint) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof ConstraintViolationException cve && constraint.equalsIgnoreCase(cve.getConstraintName())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

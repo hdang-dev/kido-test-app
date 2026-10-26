@@ -11,7 +11,7 @@ describe('emailError', () => {
 });
 
 describe('passwordError (mirrors backend PasswordPolicy)', () => {
-  it.each(['abcdefg1', 'Passw0rd!', 'mật khẩu 2024'])('accepts %s', (pw) => {
+  it.each(['abcdefg1', 'Passw0rd!', 'mật khẩu 2024', 'mậtkhẩu١٢'])('accepts %s', (pw) => {
     expect(passwordError(pw)).toBeUndefined();
   });
 

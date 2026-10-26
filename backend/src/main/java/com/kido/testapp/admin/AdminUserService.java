@@ -48,27 +48,39 @@ public class AdminUserService {
      * Grant (USER → ADMIN): any ADMIN+. Revoke (ADMIN → USER): SUPER_ADMIN only. Nobody changes their
      * own role, the SUPER_ADMIN is never a target, and SUPER_ADMIN can never be granted.
      *
-     * <p>Concurrency: the actor row is read FOR SHARE (an admin being revoked right now can't finish a
-     * grant afterwards), the target row FOR UPDATE (concurrent changes to one user are serialised).
+     * <p>Concurrency: facts that can never change (who is who, who is the SUPER_ADMIN) are checked first
+     * without locks. Then both rows are locked — actor FOR SHARE, target FOR UPDATE — always in id order,
+     * so two admins acting on each other can't deadlock. Roles are re-checked on the locked rows: an admin
+     * revoked meanwhile can't finish a grant, and changes to one user are serialised.
      */
     @Transactional
     public AppUser changeRole(String actorEmail, UUID targetId, Role newRole) {
         if (newRole == Role.SUPER_ADMIN) {
             throw ApiException.field(HttpStatus.BAD_REQUEST, "role", "Role must be ADMIN or USER");
         }
-        AppUser actor = repository.findByEmailForShare(Emails.normalise(actorEmail))
+        UUID actorId = repository.findIdByEmail(Emails.normalise(actorEmail))
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Authentication required"));
-        if (actor.getRole() == Role.USER) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "Access denied"); // demoted since the request started
-        }
-        AppUser target = repository.findByIdForUpdate(targetId)
+        Role targetRole = repository.findRoleById(targetId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
-
-        if (target.getId().equals(actor.getId())) {
+        if (targetId.equals(actorId)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "You cannot change your own role");
         }
-        if (target.getRole() == Role.SUPER_ADMIN) {
+        if (targetRole == Role.SUPER_ADMIN) { // nobody becomes or stops being SUPER_ADMIN, so this can't go stale
             throw new ApiException(HttpStatus.FORBIDDEN, "The super admin's role cannot be changed");
+        }
+
+        AppUser actor;
+        AppUser target;
+        if (actorId.compareTo(targetId) < 0) {
+            actor = lockActor(actorId);
+            target = lockTarget(targetId);
+        } else {
+            target = lockTarget(targetId);
+            actor = lockActor(actorId);
+        }
+
+        if (actor.getRole() == Role.USER) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Access denied"); // demoted since the request started
         }
         if (target.getRole() == newRole) {
             return target; // idempotent: nothing changes, sessions untouched
@@ -84,9 +96,19 @@ public class AdminUserService {
         return target;
     }
 
+    private AppUser lockActor(UUID id) {
+        return repository.findByIdForShare(id)
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Authentication required"));
+    }
+
+    private AppUser lockTarget(UUID id) {
+        return repository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
+    }
+
     /**
      * Courtesy sweep so the target is signed out everywhere right away. Correctness doesn't depend on it:
-     * CurrentRoleFilter drops any session whose role no longer matches the database. So a failure here is
+     * SessionValidityFilter drops any session whose role no longer matches the database. So a failure here is
      * logged, never turned into an error for a change that has already committed.
      */
     private void signOutAfterCommit(String email) {
@@ -96,7 +118,7 @@ public class AdminUserService {
                 try {
                     userSessions.expireAll(email);
                 } catch (RuntimeException e) {
-                    log.warn("Could not expire sessions of {} after role change; CurrentRoleFilter will", email, e);
+                    log.warn("Could not expire sessions of {} after role change; SessionValidityFilter will", email, e);
                 }
             }
         });

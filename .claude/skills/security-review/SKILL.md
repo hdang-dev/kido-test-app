@@ -12,7 +12,7 @@ For each item, report **PASS**, **FAIL**, or **N/A**, with `file:line` evidence.
 - [ ] Every controller route has a matching rule in `SecurityConfig`. Only `/api/auth/login` and `/api/auth/signup` are `permitAll`, and the catch-all is `anyRequest().authenticated()`.
 - [ ] `/api/admin/**` requires `ROLE_ADMIN` (the role hierarchy `SUPER_ADMIN > ADMIN > USER` is configured), and admin service methods also carry `@PreAuthorize`.
 - [ ] Role rules from `design.md` §5 hold: only SUPER_ADMIN can revoke ADMIN, nobody changes their own role, SUPER_ADMIN is never a target, and `SUPER_ADMIN` is rejected as a requested role.
-- [ ] Stale authorities can't survive a role change: `CurrentRoleFilter` is registered before `AuthorizationFilter`, and role-change code locks the actor (`FOR SHARE`) and target (`FOR UPDATE`) rows.
+- [ ] Stale sessions can't survive: `SessionValidityFilter` is registered before `AuthorizationFilter` and checks both the role and the credential version (`password_changed_at`). Role-change code locks the actor (`FOR SHARE`) and target (`FOR UPDATE`) rows in id order.
 - [ ] Self-service endpoints take the identity from the security context, never from a path, query, or body parameter (no IDOR).
 - [ ] Unauthenticated API calls get a `401` JSON response, not a `302` to a login page.
 - [ ] Tests exist for 401 (anonymous), 403 (wrong role), and 403 (missing CSRF token).
@@ -26,11 +26,12 @@ For each item, report **PASS**, **FAIL**, or **N/A**, with `file:line` evidence.
 ## Backend: session, CSRF, and config
 - [ ] CSRF is enabled for the SPA (`CookieCsrfTokenRepository.withHttpOnlyFalse()` + `SpaCsrfTokenRequestHandler`). It is not disabled globally.
 - [ ] The request cache is disabled, so anonymous requests never create session rows.
-- [ ] The session cookie is `HttpOnly` and `SameSite=Lax` or stricter. The session ID is rotated on login (session fixation protection).
+- [ ] The session cookie is `HttpOnly`, `SameSite=Lax` or stricter, and `Secure` outside the `dev` profile (same for `XSRF-TOKEN`). The session ID is rotated on login and on password change (session fixation protection).
 - [ ] Logout invalidates the session and clears the cookie.
 - [ ] Login failures return a generic message that does not reveal whether an email is registered.
 - [ ] CORS is not opened with `*` together with credentials (dev uses the Vite proxy, so CORS isn't needed).
 - [ ] Entities are never bound from request bodies (no mass assignment of `role` or `enabled`).
+- [ ] Free-text fields reject control characters (`@PlainText`) and count length like the DB (`@MaxLength`). Only the specific unique constraint is mapped to 409; other integrity errors are not disguised.
 - [ ] Queries use derived methods or parameters. There is no string-concatenated JPQL or SQL.
 - [ ] Schema changes are new Flyway migrations (no edits to merged ones), and `ddl-auto` is `validate`. `server.error.include-stacktrace` is `never`.
 - [ ] Password change expires the user's other sessions and rotates the current session ID.

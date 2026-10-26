@@ -26,6 +26,7 @@ server:
       cookie:
         http-only: true
         same-site: lax
+        secure: true      # SESSION (and XSRF-TOKEN) only over https; the dev profile turns it off for http://localhost
 
 # Seeded on startup if no SUPER_ADMIN exists (design.md §5)
 app:

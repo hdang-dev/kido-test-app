@@ -1,6 +1,7 @@
 package com.kido.testapp.user;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import jakarta.persistence.Column;
@@ -45,6 +46,10 @@ public class AppUser {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** Credential version: sessions created before this instant are invalid (SessionValidityFilter). */
+    @Column(name = "password_changed_at", nullable = false)
+    private Instant passwordChangedAt;
+
     protected AppUser() {
         // for JPA
     }
@@ -60,12 +65,20 @@ public class AppUser {
 
     @PrePersist
     void onCreate() {
-        createdAt = updatedAt = Instant.now();
+        createdAt = updatedAt = now();
+        if (passwordChangedAt == null) {
+            passwordChangedAt = createdAt;
+        }
     }
 
     @PreUpdate
     void onUpdate() {
-        updatedAt = Instant.now();
+        updatedAt = now();
+    }
+
+    /** Postgres timestamptz keeps microseconds; truncating keeps in-memory and stored values equal. */
+    private static Instant now() {
+        return Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     public UUID getId() {
@@ -80,8 +93,14 @@ public class AppUser {
         return passwordHash;
     }
 
-    public void setPasswordHash(String passwordHash) {
+    /** The only way to set a new password: also bumps the credential version, invalidating older sessions. */
+    public void changePasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+        this.passwordChangedAt = now();
+    }
+
+    public Instant getPasswordChangedAt() {
+        return passwordChangedAt;
     }
 
     public String getUsername() {

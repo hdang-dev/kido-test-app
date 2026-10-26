@@ -97,6 +97,29 @@ class MeControllerTest {
     }
 
     @Test
+    void rejectsControlCharactersButKeepsLineBreaksInTheBio() throws Exception {
+        Cookie session = client.signup(uniqueEmail());
+
+        client.put("/api/me", Map.of("username", "Neo\u0000", "bio", ""), session)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.username").value("must not contain control characters"));
+
+        client.put("/api/me", Map.of("username", "Neo", "bio", "line one\nline two"), session)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bio").value("line one\nline two"));
+    }
+
+    @Test
+    void aUsernameOfNoBreakSpacesCountsAsBlank() throws Exception {
+        String email = uniqueEmail();
+        Cookie session = client.signup(email);
+
+        client.put("/api/me", Map.of("username", "  ", "bio", ""), session)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value(email.substring(0, email.indexOf('@'))));
+    }
+
+    @Test
     void ignoresAttemptsToChangeEmailOrRole() throws Exception {
         String email = uniqueEmail();
         Cookie session = client.signup(email);

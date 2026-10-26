@@ -10,3 +10,9 @@ app:
   super-admin:
     email: ${APP_SUPER_ADMIN_EMAIL:superadmin@kido.local}
     password: ${APP_SUPER_ADMIN_PASSWORD:SuperAdmin@123}
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false     # plain http://localhost in development
