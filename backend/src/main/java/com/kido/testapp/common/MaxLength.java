@@ -12,9 +12,9 @@ import jakarta.validation.ConstraintValidatorContext;
 import jakarta.validation.Payload;
 
 /**
- * Length limit as stored: the stripped value, counted in code points — the same unit as Postgres
- * varchar(n). (@Size counts UTF-16 units of the raw value, so an emoji counts twice and padding counts.)
- * Null is valid; combine with @NotNull when the field is required.
+ * Length limit as stored: the trimmed value ({@link Text#trim}), counted in code points — the same unit
+ * as Postgres varchar(n). (@Size counts UTF-16 units of the raw value, so an emoji counts twice and
+ * padding counts.) Null is valid; combine with @NotNull when the field is required.
  */
 @Documented
 @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.RECORD_COMPONENT})
@@ -43,8 +43,8 @@ public @interface MaxLength {
             if (value == null) {
                 return true;
             }
-            String stripped = value.strip();
-            return stripped.codePointCount(0, stripped.length()) <= max;
+            String trimmed = Text.trim(value);
+            return trimmed.codePointCount(0, trimmed.length()) <= max;
         }
     }
 }

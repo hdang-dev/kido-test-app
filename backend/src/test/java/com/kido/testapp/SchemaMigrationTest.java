@@ -3,6 +3,10 @@ package com.kido.testapp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.kido.testapp.user.AppUser;
+import com.kido.testapp.user.AppUserRepository;
+import com.kido.testapp.user.Role;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -18,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 class SchemaMigrationTest {
 
     @Autowired JdbcTemplate jdbc;
+    @Autowired AppUserRepository repository;
     @Autowired JdbcIndexedSessionRepository sessions;
 
     private void insertUser(String email, String role) {
@@ -46,6 +51,18 @@ class SchemaMigrationTest {
         insertUser("case@test.local", "USER");
         assertThatThrownBy(() -> insertUser("Case@Test.LOCAL", "USER"))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    /** UserService.register relies on this name to tell "email taken" apart from other integrity errors. */
+    @Test
+    void duplicateEmailViolationCarriesTheIndexName() {
+        repository.saveAndFlush(new AppUser("named@test.local", "x", "u", null, Role.USER));
+
+        assertThatThrownBy(() -> repository.saveAndFlush(new AppUser("NAMED@test.local", "x", "u", null, Role.USER)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .cause()
+                .isInstanceOfSatisfying(ConstraintViolationException.class,
+                        cve -> assertThat(cve.getConstraintName()).isEqualTo("uq_app_user_email_ci"));
     }
 
     @Test

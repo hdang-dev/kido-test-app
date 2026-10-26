@@ -1,12 +1,13 @@
 package com.kido.testapp.user;
 
 import com.kido.testapp.common.ApiException;
+import com.kido.testapp.common.Text;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 @Service
 public class UserService {
@@ -36,13 +37,16 @@ public class UserService {
         if (repository.existsByEmail(normalisedEmail)) {
             throw ApiException.field(HttpStatus.CONFLICT, "email", EMAIL_TAKEN);
         }
-        String displayName = StringUtils.hasText(username) ? username.strip() : Emails.defaultUsername(normalisedEmail);
+        String displayName = Text.isBlank(username) ? Emails.defaultUsername(normalisedEmail) : Text.trim(username);
         var user = new AppUser(normalisedEmail, passwordEncoder.encode(password), displayName,
-                StringUtils.hasText(bio) ? bio.strip() : null, Role.USER);
+                Text.isBlank(bio) ? null : Text.trim(bio), Role.USER);
         try {
             return repository.saveAndFlush(user); // flush now so a concurrent duplicate surfaces here, not at commit
-        } catch (DataIntegrityViolationException race) {
-            throw ApiException.field(HttpStatus.CONFLICT, "email", EMAIL_TAKEN);
+        } catch (DataIntegrityViolationException e) {
+            if (violates(e, "uq_app_user_email_ci")) { // a concurrent sign-up with the same email won the race
+                throw ApiException.field(HttpStatus.CONFLICT, "email", EMAIL_TAKEN);
+            }
+            throw e; // anything else is a real error, not "email taken"
         }
     }
 
@@ -50,8 +54,8 @@ public class UserService {
     @Transactional
     public AppUser updateProfile(String email, String username, String bio) {
         AppUser user = getByEmail(email);
-        user.setUsername(StringUtils.hasText(username) ? username.strip() : Emails.defaultUsername(user.getEmail()));
-        user.setBio(StringUtils.hasText(bio) ? bio.strip() : null);
+        user.setUsername(Text.isBlank(username) ? Emails.defaultUsername(user.getEmail()) : Text.trim(username));
+        user.setBio(Text.isBlank(bio) ? null : Text.trim(bio));
         return user; // dirty checking writes it on commit
     }
 
@@ -83,5 +87,14 @@ public class UserService {
     public AppUser getByEmail(String email) {
         return repository.findByEmail(Emails.normalise(email))
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Authentication required"));
+    }
+
+    private static boolean violates(DataIntegrityViolationException e, String constraint) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof ConstraintViolationException cve && constraint.equalsIgnoreCase(cve.getConstraintName())) {
+                return true;
+            }
+        }
+        return false;
     }
 }
